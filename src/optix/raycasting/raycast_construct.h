@@ -1,5 +1,5 @@
-/* 
- * Copyright (c) 2018 NVIDIA CORPORATION. All rights reserved.
+/*
+ * Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,12 +28,46 @@
 
 #pragma once
 
-#include <optixu/optixu_math_namespace.h>                                        
+#include <optixu/optixu_math_namespace.h>
+using namespace optix;
 
-struct ParallelogramLight                                                        
-{                                                                                
-    optix::float3 corner;                                                          
-    optix::float3 v1, v2;                                                          
-    optix::float3 normal;                                                          
-    optix::float3 emission;                                                        
+//
+// Common definitions shared by host and device code
+//
+
+struct RayData
+{
+  float3 origin;
+  float  tmin;
+  float3 dir;
+  float  tmax;
 };
+
+struct Hit
+{
+  float t;
+  float3 geom_normal;
+  float3 hit_point;
+  float3 color;
+  float3 attenuation;
+  float3 new_direction;
+  float pdf;
+  unsigned int done;
+  unsigned int seed;
+  float3 result;
+};
+
+//struct Ray
+//{
+//    float3 result;
+//    float3 radiance;
+//    float3 attenuation;
+//    float3 origin;
+//    float3 direction;
+//    float3 normal;
+//    float3 diffuse_color;
+//    unsigned int seed;
+//    int depth;
+//    int countEmitted;
+//    int done;
+//};

@@ -2,10 +2,25 @@ from utils.scene_loader import *
 from core.camera import *
 from utils.math_utils import *
 from utils.geometry_creator import *
-from pyoptix import Program, Material, GeometryInstance, TextureSampler, Buffer
+from pyoptix import Program, Material, GeometryInstance, \
+    TextureSampler, Buffer, Transform, GeometryGroup, Group, Acceleration
 import os
 from PIL import Image
 from core.optix_mesh import OptixMesh
+
+
+def add_transform(transformation_matrix, geometry_instance):
+    if transformation_matrix is None:
+        transformation_matrix = np.eye(4, dtype=np.float32)
+
+    gg = GeometryGroup(children=[geometry_instance])
+    gg.set_acceleration(Acceleration("Trbvh"))
+
+    transform = Transform(children=[gg])
+    transform.set_matrix(False, transformation_matrix)
+    transform.add_child(gg)
+    return transform
+
 
 class Scene:
     def __init__(self, name):
@@ -34,8 +49,10 @@ class Scene:
         doc = ET.parse(file_name)
         root = doc.getroot()
 
+        # 0. load scene image size.
         self.height, self.width = load_scene_size(root.find("sensor"))
         print("Size: %d x %d" % (self.width, self.height))
+
         # 1. load camera
         self.camera = load_camera(root.find("sensor"))
 
@@ -44,6 +61,9 @@ class Scene:
 
         # 3. load shape info
         self.shape_list, self.obj_list = load_shape(root, self.material_dictionary)
+
+        # 4. load emitter info
+        self.lights = load_emitter(root)
 
         print("Material dictionary", self.material_dictionary.keys())
 
@@ -54,17 +74,27 @@ class Scene:
         par_int = Program('optix/shapes/parallelogram.cu', 'intersect')
         sph_bb = Program('optix/shapes/sphere.cu', 'bounds')
         sph_int = Program('optix/shapes/sphere.cu', 'intersect')
-        target_program = 'optix/integrators/optixPathTracerQTable.cu'
+        disk_bb = Program('optix/shapes/disk.cu', 'bounds')
+        disk_int = Program('optix/shapes/disk.cu', 'intersect')
 
-        diffuse = Material(closest_hit={0: Program(target_program, 'diffuse')}
-                           ,any_hit={1: Program(target_program, 'shadow')})
-        diffuse_light = Material(closest_hit={0: Program(target_program, 'diffuseEmitter')})
+        # target_program = 'optix/integrators/optixPathTracerQTable.cu'
+        # a = Transform()
+        # a.add_child()
 
-        glass = Material(closest_hit={0: Program(target_program, 'glass')})
+        # diffuse = Material(closest_hit={0: Program(diffuse_target_cu, 'diffuse')} ,any_hit={1: Program(diffuse_target_cu, 'shadow')})
+        target_program = 'optix/integrators/light_hit_program.cu'
+        diffuse_light = Material(closest_hit={0: Program(target_program, 'diffuseEmitter')},
+                                 any_hit={1: Program(target_program, 'any_hit')})
+        diffuse_target_cu = 'optix/integrators/hit_program.cu'
+        diffuse = Material(closest_hit={0: Program(diffuse_target_cu, 'closest_hit')},
+                           any_hit={1: Program(diffuse_target_cu, 'any_hit')})
+
+        diffuse["programId"] = np.array(0, dtype=np.int32)
+        # glass = Material(closest_hit={0: Program(target_program, 'glass')})
         # glass["refraction_index"] = np.array([1.4], dtype=np.float32)
-        glass["refraction_color"] = np.array([0.99, 0.99, 0.99], dtype=np.float32)
-        glass["reflection_color"] = np.array([0.99, 0.99, 0.99], dtype=np.float32)
-        glass["extinction"] = np.array([0, 0, 0], dtype=np.float32)
+        # glass["refraction_color"] = np.array([0.99, 0.99, 0.99], dtype=np.float32)
+        # glass["reflection_color"] = np.array([0.99, 0.99, 0.99], dtype=np.float32)
+        # glass["extinction"] = np.array([0, 0, 0], dtype=np.float32)
 
         geometry_instances = []
         light_instances = []
@@ -75,25 +105,32 @@ class Scene:
             bbox = None
             if shape_type == "obj":
                 mesh = self.obj_geometry_dict[shape.obj_file_name]
+                shape.pos_buffer_id = mesh.geometry['vertex_buffer'].get_id()
+                shape.indice_buffer_id = mesh.geometry['index_buffer'].get_id()
+                shape.normal_buffer_id = mesh.geometry['normal_buffer'].get_id()
+                shape.n_triangles = mesh.n_triangles
                 geometry = mesh.geometry
                 bbox = mesh.bbox
-
             elif shape_type == "rectangle":
                 o, u, v = shape.rectangle_info
                 geometry = create_parallelogram(o, u, v, par_int, par_bb)
-                bbox = get_bbox_from_rectangle(o,u,v)
-
+                bbox = get_bbox_from_rectangle(o, u, v)
             elif shape_type == "sphere":
                 bbox = get_bbox_from_sphere(shape.center, shape.radius)
                 geometry = create_sphere(shape.center, shape.radius, sph_int, sph_bb)
+            elif shape_type == "disk":
+                bbox = get_bbox_from_sphere(shape.center, shape.radius)
+                geometry = create_disk(shape.center, shape.radius, shape.normal, disk_int, disk_bb)
 
             material_parameter = shape.material_parameter
-
+            geometry_instance = None
             if material_parameter.type == "light":
                 geometry_instance = GeometryInstance(geometry, diffuse_light)
                 geometry_instance["emission_color"] = material_parameter.emission
-                light = {"data": shape.rectangle_info, "emission": material_parameter.emission}
+                geometry_instance["lightId"] = np.array(len(self.lights), dtype=np.int32)
+                light = {"type": "area", "shape_data": shape, "emission": material_parameter.emission}
                 self.lights.append(light)
+
             elif material_parameter.type == "diffuse":
                 print("diffuse", material_parameter.color)
                 if material_parameter.diffuse_map != -1:
@@ -107,15 +144,22 @@ class Scene:
             elif material_parameter.type == "dielectric":
                 print("dielectric!!")
                 geometry_instance = GeometryInstance(geometry, diffuse)
-                geometry_instance["refraction_index"] = np.array([material_parameter.intIOR], dtype=np.float32)
+                geometry_instance["diffuse_color"] = material_parameter.color
+                geometry_instance["diffuse_map_id"] = np.array(0, dtype=np.int32)
+                #geometry_instance = GeometryInstance(geometry, diffuse)
+                #geometry_instance["refraction_index"] = np.array([material_parameter.intIOR], dtype=np.float32)
 
             if shape.transformation is not None:
-                geometry_instance["transformation"] = shape.transformation
                 bbox = get_bbox_transformed(bbox, shape.transformation)
+                self.bbox = get_bbox_merged(self.bbox, bbox)
 
-            self.bbox = get_bbox_merged(self.bbox, bbox)
-            light_instances.append(geometry_instance)
-
+            transform = add_transform(shape.transformation, geometry_instance)
+            #if shape.transformation is not None:
+            # geometry_instance["transformation"] = shape.transformation
+            if material_parameter.type == "light":
+                light_instances.append(transform)
+            else:
+                geometry_instances.append(transform)
         if self.name == "veach_door_simple":
             o = np.array([34.3580, 136.5705, -321.7834], dtype=np.float32)
             ox = np.array([-117.2283, 136.5705, -321.7834], dtype=np.float32)
@@ -126,15 +170,17 @@ class Scene:
             geometry_instance = GeometryInstance(geometry, diffuse_light)
             emission_color = np.array([1420, 1552, 1642], dtype=np.float32)
             geometry_instance["emission_color"] = emission_color
-            light_instances.append(geometry_instance)
-            light = {"data": (o, u, v), "emission": emission_color}
+            light_instances.append(add_transform(None, geometry_instance))
+            shape = ShapeParameter()
+            shape.shape_type = "rectangle"
+            shape.rectangle_info = (o, u, v)
+            light = {"type": "area", "shape_data": shape, "emission": emission_color}
             self.lights.append(light)
 
         self.geometry_instances = geometry_instances
         self.light_instances = light_instances
         print(self.bbox.bbox_max)
         print(self.bbox.bbox_min)
-
 
     def create_objs(self):
         OptixMesh.mesh_bb = Program('optix/shapes/triangle_mesh.cu', 'mesh_bounds')

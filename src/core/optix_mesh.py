@@ -8,7 +8,6 @@ class OptixMesh:
     mesh_it = None
 
     def __init__(self):
-        pass
         self.geometry = Geometry(bounding_box_program=OptixMesh.mesh_bb, intersection_program=OptixMesh.mesh_it)
         #
         # # init buffers

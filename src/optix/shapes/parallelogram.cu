@@ -41,6 +41,8 @@ rtDeclareVariable(float3, geometric_normal, attribute geometric_normal, );
 rtDeclareVariable(float3, shading_normal, attribute shading_normal, ); 
 rtDeclareVariable(int, lgt_idx, attribute lgt_idx, ); 
 rtDeclareVariable(optix::Ray, ray, rtCurrentRay, );
+rtDeclareVariable(int, hitTriIdx,  attribute hitTriIdx, );
+
 
 RT_PROGRAM void intersect(int primIdx)
 {
@@ -58,6 +60,7 @@ RT_PROGRAM void intersect(int primIdx)
           shading_normal = geometric_normal = n;
           texcoord = make_float3(a1,a2,0);
           lgt_idx = lgt_instance;
+          hitTriIdx = 0;
           rtReportIntersection( 0 );
         }
       }

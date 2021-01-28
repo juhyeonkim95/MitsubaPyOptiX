@@ -36,11 +36,13 @@ using namespace optix;
 
 //rtDeclareVariable(Matrix3x3,  rotationscale, , );
 //rtDeclareVariable(float3,  translation, , );
-rtDeclareVariable(Matrix4x4,  transformation, , );
+// rtDeclareVariable(Matrix4x4,  transformation, , );
 
 // This is to be plugged into an RTgeometry object to represent
 // a triangle mesh with a vertex buffer of triangle soup (triangle list)
 // with an interleaved position, normal, texturecoordinate layout.
+
+// RTtransform transformation;
 
 rtBuffer<float3> vertex_buffer;     
 rtBuffer<float3> normal_buffer;
@@ -54,19 +56,20 @@ rtDeclareVariable(float3, shading_normal,   attribute shading_normal, );
 
 rtDeclareVariable(float3, back_hit_point,   attribute back_hit_point, ); 
 rtDeclareVariable(float3, front_hit_point,  attribute front_hit_point, ); 
+rtDeclareVariable(int, hitTriIdx,  attribute hitTriIdx, );
 
 rtDeclareVariable(optix::Ray, ray, rtCurrentRay, );
 
-RT_CALLABLE_PROGRAM float3 get_transformed_buffer(float3 v, bool isNormal) {
-	if(isNormal){
-	    float4 a = make_float4(v.x, v.y, v.z, 0);
-	    a = transformation * a;
-	    return normalize(make_float3(a.x, a.y, a.z));
-	}
-	float4 a = make_float4(v.x, v.y, v.z, 1);
-    a = transformation * a;
-    return make_float3(a.x, a.y, a.z);
-}
+//RT_CALLABLE_PROGRAM float3 get_transformed_buffer(float3 v, bool isNormal) {
+//	if(isNormal){
+//	    float4 a = make_float4(v.x, v.y, v.z, 0);
+//	    a = transformation * a;
+//	    return normalize(make_float3(a.x, a.y, a.z));
+//	}
+//	float4 a = make_float4(v.x, v.y, v.z, 1);
+//    a = transformation * a;
+//    return make_float3(a.x, a.y, a.z);
+//}
 
 template<bool DO_REFINE>
 static __device__
@@ -74,9 +77,12 @@ void meshIntersect( int primIdx )
 {
   const int3 v_idx = index_buffer[primIdx];
 
-  const float3 p0 = get_transformed_buffer(vertex_buffer[ v_idx.x ], false);
-  const float3 p1 = get_transformed_buffer(vertex_buffer[ v_idx.y ], false);
-  const float3 p2 = get_transformed_buffer(vertex_buffer[ v_idx.z ], false);
+//  const float3 p0 = get_transformed_buffer(vertex_buffer[ v_idx.x ], false);
+//  const float3 p1 = get_transformed_buffer(vertex_buffer[ v_idx.y ], false);
+//  const float3 p2 = get_transformed_buffer(vertex_buffer[ v_idx.z ], false);
+  const float3 p0 = vertex_buffer[ v_idx.x ];
+  const float3 p1 = vertex_buffer[ v_idx.y ];
+  const float3 p2 = vertex_buffer[ v_idx.z ];
 
   // Intersect ray with triangle
   float3 n;
@@ -84,14 +90,14 @@ void meshIntersect( int primIdx )
   if( intersect_triangle( ray, p0, p1, p2, n, t, beta, gamma ) ) {
 
     if(  rtPotentialIntersection( t ) ) {
-
+      hitTriIdx = primIdx;
       geometric_normal = normalize( n );
       if( normal_buffer.size() == 0 ) {
         shading_normal = geometric_normal; 
       } else {
-        float3 n0 = get_transformed_buffer(normal_buffer[ v_idx.x ], true);
-        float3 n1 = get_transformed_buffer(normal_buffer[ v_idx.y ], true);
-        float3 n2 = get_transformed_buffer(normal_buffer[ v_idx.z ], true);
+        float3 n0 = normal_buffer[ v_idx.x ];
+        float3 n1 = normal_buffer[ v_idx.y ];
+        float3 n2 = normal_buffer[ v_idx.z ];
         shading_normal = normalize( n1*beta + n2*gamma + n0*(1.0f-beta-gamma) );
       }
 
@@ -136,13 +142,13 @@ RT_PROGRAM void mesh_bounds (int primIdx, float result[6])
 {
   const int3 v_idx = index_buffer[primIdx];
 
-  const float3 v0   = get_transformed_buffer(vertex_buffer[ v_idx.x ], false);
-  const float3 v1   = get_transformed_buffer(vertex_buffer[ v_idx.y ], false);
-  const float3 v2   = get_transformed_buffer(vertex_buffer[ v_idx.z ], false);
+  const float3 v0   = vertex_buffer[ v_idx.x ];
+  const float3 v1   = vertex_buffer[ v_idx.y ];
+  const float3 v2   = vertex_buffer[ v_idx.z ];
   const float  area = length(cross(v1-v0, v2-v0));
 
   optix::Aabb* aabb = (optix::Aabb*)result;
-  
+
   if(area > 0.0f && !isinf(area)) {
     aabb->m_min = fminf( fminf( v0, v1), v2 );
     aabb->m_max = fmaxf( fmaxf( v0, v1), v2 );

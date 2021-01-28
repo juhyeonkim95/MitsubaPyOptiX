@@ -10,6 +10,10 @@ def length2(vec):
     return vec.dot(vec)
 
 
+def length(vec):
+    return math.sqrt(vec.dot(vec))
+
+
 class BoundingBox:
     def __init__(self, bbox_max=np.array([0, 0, 0], dtype=np.float32),
                  bbox_min=np.array([0, 0, 0], dtype=np.float32)):
@@ -105,7 +109,7 @@ def mapUVToDirection(uv, flipy=False):
                 else:
                     return (0, 1, 0)
     assert xx >= 0
-    theta = math.acos(1 - xx * xx)
+    theta = math.acos(max(min(1 - xx * xx, 1), -1))
     phi = (math.pi / 4) * (offset + (yy / xx))
     if flipy:
         ay = - math.cos(theta)
@@ -186,4 +190,23 @@ def getEpsilon(index, max_index, t=0, a=0.1, k=100):
         return max(1 - index / max_index, 0)
     elif t is 1:
         x = math.pow(a, 1 / k)
+        x = max(x, 0.05)
         return math.pow(x, index)
+
+
+def get_luminance(c):
+    luminance = 0.3 * c[:, :, 0] + 0.6 * c[:, :, 1] + 0.1 * c[:, :, 2]
+    return luminance
+
+def ToneMap(c, limit):
+    luminance = 0.3*c[:,:,0] + 0.6*c[:,:,1] + 0.1*c[:,:,2]
+    luminance = np.dstack([luminance]*3)
+    col = c * 1.0 / (1.0 + luminance / limit)
+    return col
+
+
+def LinearToSrgb(c):
+    kInvGamma = 1.0 / 2.2
+    # c2 = np.power(c[0:3], kInvGamma)
+    return np.power(c, kInvGamma)
+

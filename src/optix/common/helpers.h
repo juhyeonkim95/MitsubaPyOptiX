@@ -29,6 +29,8 @@
 #pragma once
 
 #include <optixu/optixu_math_namespace.h>
+#include <optixu/optixu_matrix_namespace.h>
+
 using namespace optix;
 static __host__ __device__ float3 mapUVToDirection(float2 uv)
 {
@@ -63,6 +65,15 @@ static __host__ __device__ float3 mapUVToDirection(float2 uv)
     theta = acos(1 - xx*xx);
     phi = (M_PIf/4) * (offset + (yy / xx));
     return make_float3(sinf(theta) * cosf(phi), cosf(theta), -sinf(theta) * sinf(phi));
+}
+
+static __host__ __device__ float3 mapThetaPhiToDirection(float2 thetaPhi)
+{
+    float theta = M_PIf * thetaPhi.x;
+    float phi = 2 * M_PIf * thetaPhi.y;
+
+    float3 direction = make_float3(sinf(theta) * cosf(phi), cosf(theta), -sinf(theta) * sinf(phi));
+    return direction;
 }
 
 static __host__ __device__ float2 mapDirectionToUV(float3 direction)
@@ -141,12 +152,7 @@ static __host__ __device__ __inline__ void generateOrthoBasis(float3 &u, float3 
 	v = cross(w, u);
 }
 
-static __host__ __device__ __inline__ float3 UniformSampleSphere(float u1, float u2)
-{
-    float sin_theta = sqrtf(max(0.0, 1.0 - u1 * u1));
-    float phi = 2.0 * M_PI * u2;
-	return make_float3(cosf(phi) * sin_theta, sinf(phi) * sin_theta, u1);
-}
+
 
 static __device__ __inline__ float fresnel( float cos_theta_i, float cos_theta_t, float eta )
 {
@@ -156,4 +162,37 @@ static __device__ __inline__ float fresnel( float cos_theta_i, float cos_theta_t
                      ( cos_theta_i*eta + cos_theta_t );
 
     return 0.5f * ( rs*rs + rp*rp );
+}
+
+static __host__ __device__ __inline__ float powerHeuristic(float a, float b)
+{
+	float t = a * a;
+	return t / (b*b + t);
+}
+
+
+__device__ inline float4 ToneMap(const float4& c, float limit)
+{
+	float luminance = 0.3f*c.x + 0.6f*c.y + 0.1f*c.z;
+
+	float4 col = c * 1.0f / (1.0f + luminance / limit);
+	return make_float4(col.x, col.y, col.z, 1.0f);
+}
+
+__device__ inline float4 LinearToSrgb(const float4& c)
+{
+	const float kInvGamma = 1.0f / 2.2f;
+	return make_float4(powf(c.x, kInvGamma), powf(c.y, kInvGamma), powf(c.z, kInvGamma), c.w);
+}
+
+__device__ float3 transform_point(Matrix4x4 &transformation, float3 v) {
+	float4 a = make_float4(v.x, v.y, v.z, 1);
+    a = transformation * a;
+    return make_float3(a.x, a.y, a.z);
+}
+
+__device__ float3 transform_normal(Matrix4x4 &transformation, float3 v) {
+    float4 a = make_float4(v.x, v.y, v.z, 0);
+    a = transformation * a;
+    return normalize(make_float3(a.x, a.y, a.z));
 }

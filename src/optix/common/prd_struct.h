@@ -4,6 +4,11 @@
 
 using namespace optix;
 
+struct MaterialParameter
+{
+    float3 diffuse_color;
+};
+
 struct PerRayData_pathtrace
 {
     float3 result;
@@ -17,8 +22,12 @@ struct PerRayData_pathtrace
     int depth;
     int countEmitted;
     int done;
+    bool isMissed;
     float t;
     float3 current_attenuation;
+    float scatterPdf;
+    MaterialParameter mat;
+    bool volume_scattered;
 };
 
 struct PerRayData_pathtrace_shadow
@@ -29,5 +38,20 @@ struct PerRayData_pathtrace_shadow
 struct Sample_info
 {
     float3 direction;
-    float p_w;
+    float pdf;
 };
+
+struct SurfaceInteraction3f
+{
+    float3 p;
+    float3 n;
+    float3 wi;
+};
+
+//struct ParallelogramLight
+//{
+//    optix::float3 corner;
+//    optix::float3 v1, v2;
+//    optix::float3 normal;
+//    optix::float3 emission;
+//};

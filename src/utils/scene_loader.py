@@ -2,6 +2,7 @@ import xml.etree.ElementTree as ET
 import numpy as np
 from core.camera import Camera
 from core.parameters import MaterialParameter, ShapeParameter
+from utils.math_utils import *
 
 
 def str2floatarray(s):
@@ -35,6 +36,7 @@ def rectangle_from(o, dx, dy, mat):
     offset1 = mat.dot(o+dx)[0:3] - anchor
     offset2 = mat.dot(o+dy)[0:3] - anchor
     return anchor, offset1, offset2
+
 
 def cube(mat):
     o1 = np.array([-1., -1., -1., 1.], dtype=np.float32)
@@ -93,7 +95,9 @@ def load_material(root):
 
         if bsdf_type == "dielectric":
             material.intIOR = float(bsdf.find('float[@name="intIOR"]').attrib["value"])
-            material.type = bsdf_type
+
+        if bsdf_type == "conductor":
+            pass
 
         if bsdf_type == "diffuse":
             spectrum = bsdf.find("spectrum")
@@ -121,6 +125,68 @@ def load_material(root):
     return texture_list, material_dictionary
 
 
+def transform_point(to_world, p):
+    p = np.array([p[0], p[1], p[2], 1], dtype=np.float32)
+    p = np.matmul(to_world, p)
+    p = p[0:3]
+    return p
+
+
+def transform_vector(to_world, v):
+    v = np.array([v[0], v[1], v[2], 0], dtype=np.float32)
+    v = np.matmul(to_world, v)
+    v = v[0:3]
+    return v
+
+
+def get_pos_dir(node):
+    to_world = node.find("transform/matrix").attrib['value']
+    to_world = str2_4by4mat(to_world)
+    position = transform_point(to_world, [0, 0, 0])
+    direction = transform_vector(to_world, [0, 0, 1])
+    direction = normalize(direction)
+    return position, direction
+
+
+def get_pos_dir_rad(node):
+    to_world = node.find("transform/matrix").attrib['value']
+    to_world = str2_4by4mat(to_world)
+    position = transform_point(to_world, [0, 0, 0])
+    direction = transform_vector(to_world, [0, 0, 1])
+    direction = normalize(direction)
+    x_axis = transform_point(to_world, [1, 0, 0])
+    radius = length(x_axis - position)
+    return position, direction, radius
+
+
+def load_emitter(root):
+    lights = []
+    for emitter in root.findall('emitter'):
+        emitter_type = emitter.attrib['type']
+        if emitter_type == "point":
+            to_world = emitter.find("transform/matrix").attrib['value']
+            to_world = str2_4by4mat(to_world)
+            position = transform_point(to_world, [0, 0, 0])
+            intensity = emitter.find('rgb[@name="intensity"]').attrib["value"]
+            intensity = str2floatarray(intensity)
+            light_info = {"type": "point", "intensity": intensity, "position": position}
+            lights.append(light_info)
+        elif emitter_type == "spot":
+            position, direction = get_pos_dir(emitter)
+            intensity = emitter.find('rgb[@name="intensity"]').attrib["value"]
+            intensity = str2floatarray(intensity)
+            cutoffAngle = float(emitter.find('float[@name="cutoffAngle"]').attrib["value"])
+            if emitter.find('float[@name="beamWidth"]') is not None:
+                beamWidth = float(emitter.find('float[@name="beamWidth"]').attrib["value"])
+            else:
+                beamWidth = 0.75 * cutoffAngle
+            light_info = {"type": "spot", "intensity": intensity, "position": position, "direction": direction,
+                          "cutoffAngle": cutoffAngle, "beamWidth": beamWidth}
+            lights.append(light_info)
+
+    return lights
+
+
 def load_shape(root, material_parameter_dict):
     shape_list = []
     obj_list = []
@@ -143,14 +209,21 @@ def load_shape(root, material_parameter_dict):
             to_world = str2_4by4mat(to_world)
             shape_parameter.rectangle_info = cube(to_world)
         elif shape_type == "sphere":
-            radius = float(shape.find("float").attrib['value'])
-            point_x = float(shape.find("point").attrib['x'])
-            point_y = float(shape.find("point").attrib['y'])
-            point_z = float(shape.find("point").attrib['z'])
-            center = np.array([point_x, point_y, point_z], dtype=np.float32)
+            position, normal, radius = get_pos_dir_rad(shape)
+            shape_parameter.center = position
             shape_parameter.radius = radius
-            shape_parameter.center = center
-
+            #radius = float(shape.find("float").attrib['value'])
+            #point_x = float(shape.find("point").attrib['x'])
+            #point_y = float(shape.find("point").attrib['y'])
+            #point_z = float(shape.find("point").attrib['z'])
+            #center = np.array([point_x, point_y, point_z], dtype=np.float32)
+            #shape_parameter.radius = radius
+            #shape_parameter.center = center
+        elif shape_type == "disk":
+            position, normal, radius = get_pos_dir_rad(shape)
+            shape_parameter.center = position
+            shape_parameter.radius = radius
+            shape_parameter.normal = normal
         elif shape_type == "obj":
             mesh_file_name = shape.find('string[@name="filename"]').attrib["value"]
             if mesh_file_name not in obj_list:
