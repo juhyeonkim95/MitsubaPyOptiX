@@ -25,7 +25,6 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
 #include <optixu/optixu_math_namespace.h>
 //#include "optixPathTracer.h"
 //#include "random.h"
@@ -42,7 +41,7 @@ using namespace optix;
 // Scene wide variables
 // rtDeclareVariable(float,         scene_epsilon, , );
 // rtDeclareVariable(rtObject,      top_object, , );
-rtDeclareVariable(uint2,         launch_index, rtLaunchIndex, );
+rtDeclareVariable(uint3,         launch_index, rtLaunchIndex, );
 
 //rtDeclareVariable(float,         sigma_s, , );
 //rtDeclareVariable(float,         sigma_a, , );
@@ -75,6 +74,7 @@ rtBuffer<float4, 2>              output_buffer;
 rtBuffer<float4, 2>              output_buffer2;
 rtBuffer<float, 2>               hit_count_buffer;
 rtBuffer<float, 2>               path_length_buffer;
+rtBuffer<float2, 2>               scatter_type_buffer;
 
 rtDeclareVariable(unsigned int,  scatter_sample_type, , );
 rtDeclareVariable(unsigned int,  need_q_table_update, , );
@@ -163,69 +163,66 @@ RT_FUNCTION void integrator(PerRayData_pathtrace& prd, float3& radiance)
     float3 ray_direction = prd.direction;
     float3 normal = make_float3(0,1,0);
 
+    prd.brdf_scatter_count = 0;
+    prd.q_scatter_count = 0;
+
     for(;;)
     {
         prd.current_attenuation = make_float3(1.0f);
         prd.volume_scattered = false;
         prd.radiance = make_float3(0.0f);
-        Ray ray = make_Ray(ray_origin, ray_direction, pathtrace_ray_type, scene_epsilon, RT_DEFAULT_MAX);
+
+        Ray ray = make_Ray(ray_origin, ray_direction, 0, scene_epsilon, RT_DEFAULT_MAX);
         rtTrace(top_object, ray, prd);
         bool scattered = false;
         if(!prd.isMissed){
             scattered = volumeScatter(ray_origin, ray_direction, prd);
         }
-        if(need_q_table_update == 1){
+        if(need_q_table_update){
             float reward = fmaxf(prd.radiance);
             float target_q_value;
             if(prd.done){
-                target_q_value = reward * 0.1;
+                target_q_value = reward * 0.1f;
             }else{
                 float3 wo = -ray_direction;
                 float3 wi = prd.direction;
 
-                if(prd.volume_scattered){
-                    float distance = length(prd.origin - ray_origin);
-                    target_q_value = getNextQValueVolume(hg_g, prd.origin, wo, wi) * exp(-sigma_t * distance);
-                } else {
-                    //new_value = reward + 0.9f * getQValue(prd.origin, prd.direction);
-                    float f_s = fmaxf(prd.mat.diffuse_color);
-                    //(prd.diffuse_color.x + prd.diffuse_color.y + prd.diffuse_color.z) / 3.0f;
-
-                    target_q_value = getNextQValue(prd.origin, prd.normal, wo, wi) * f_s;
-                    if(sigma_t > 0){
-                        float distance = length(prd.origin - ray_origin);
-                        target_q_value *= exp(-sigma_t * distance);
-                    }
-                }
+                float f_s = (prd.diffuse_color.x + prd.diffuse_color.y + prd.diffuse_color.z) / 3.0f;
+                target_q_value = getNextQValue(prd.origin, prd.normal, wo, wi) * f_s;
             }
 
             if(prd.depth > 0){
-                if(save_q_cos == 1){
-                    target_q_value *= max(dot(normal, ray_direction), 0.0);
-                }
-
                 if(accumulative_q_table_update == 0){
-                    float alpha = 1.0f / (1.0f + updateVisit(ray_origin, ray_direction));
+                    //float alpha = 1.0f / sqrt(1.0f + updateVisit(ray_origin, ray_direction));
+                    float alpha = 0.01f;
                     float update_value = (1-alpha) * getQValue(ray_origin, ray_direction) + alpha * target_q_value;
                     setQValue(ray_origin, ray_direction, update_value);
-
-                    if(use_soft_q_update)
-                        setQValueSoft(ray_origin, prd.origin, target_q_value);
+//                    if(use_soft_q_update)
+//                        setQValueSoft(ray_origin, prd.origin, target_q_value);
                 } else if(accumulative_q_table_update == 1){
                     accumulateQValue(ray_origin, ray_direction, target_q_value);
                 }
             }
         }
 
+        prd.depth++;
+
         if(!scattered){
+            prd.result += prd.radiance * prd.attenuation;
+            //prd.result = ray_direction + make_float3(1);
+
             prd.attenuation *= prd.current_attenuation;
             if(prd.done)
             {
-                prd.result += prd.radiance * prd.attenuation;
+                // prd.result += prd.radiance * prd.attenuation;
                 break;
             }
         }
-        prd.result += prd.radiance * prd.attenuation;
+
+        if(prd.depth >= max_depth){
+            break;
+        }
+
         // Russian roulette termination
         if(prd.depth >= rr_begin_depth)
         {
@@ -236,11 +233,7 @@ RT_FUNCTION void integrator(PerRayData_pathtrace& prd, float3& radiance)
             prd.attenuation /= pcont;
         }
 
-        if(prd.depth >= max_depth){
-            break;
-        }
 
-        prd.depth++;
 
         // Update ray data for the next path segment
         ray_origin = prd.origin;
@@ -253,7 +246,10 @@ RT_PROGRAM void pathtrace_camera()
 {
     size_t2 screen = output_buffer.size();
     float2 inv_screen = 1.0f/make_float2(screen) * 2.f;
-    float2 pixel = (make_float2(launch_index)) * inv_screen - 1.f;
+    uint2 screen_index = make_uint2(launch_index.x, launch_index.y);
+    uint sample_index = launch_index.z;
+
+    float2 pixel = make_float2(screen_index) * inv_screen - 1.f;
 
     float2 jitter_scale = inv_screen / sqrt_num_samples;
     unsigned int samples_per_pixel = sqrt_num_samples*sqrt_num_samples;
@@ -263,7 +259,7 @@ RT_PROGRAM void pathtrace_camera()
 
     do
     {
-        unsigned int seed = tea<16>(screen.x*launch_index.y+launch_index.x, completed_frame_number);
+        unsigned int seed = tea<16>(screen.x*screen.y*sample_index + screen.x*launch_index.y+launch_index.x, completed_frame_number);
         completed_frame_number += 1;
         //
         // Sample pixel using jittering
@@ -297,21 +293,35 @@ RT_PROGRAM void pathtrace_camera()
 
         result += prd.result;
         seed = prd.seed;
-        float hit_count = (prd.done && !prd.isMissed) ? 1.0 : 0.0;
-        hit_count_buffer[launch_index] += hit_count;
-        path_length_buffer[launch_index] += float(prd.depth);
+        // float hit_count = (prd.done && !prd.isMissed) ? 1.0 : 0.0;
+        float hit_count = (prd.done && (length(prd.result) > 0))  ? 1.0 : 0.0;
+
+        atomicAdd(&hit_count_buffer[screen_index], hit_count);
+        atomicAdd(&path_length_buffer[screen_index], float(prd.depth));
+        atomicAdd(&scatter_type_buffer[screen_index].x, prd.brdf_scatter_count);
+        atomicAdd(&scatter_type_buffer[screen_index].y, prd.q_scatter_count);
+
     } while (--left_samples_pass);
 
     //prd.origin = ray_origin;
     //prd.direction = ray_direction;
     //prd.pdf = 0.0f;
     //prd.specularBounce = false;
-
     //
     // Update the output buffer
     //
-    output_buffer[launch_index] = make_float4( result / samples_per_pass, 1.0 );
-    output_buffer2[launch_index] = make_float4( result * result / samples_per_pass, 1.0 );
+    atomicAdd(&output_buffer[screen_index].x,  result.x);
+    atomicAdd(&output_buffer[screen_index].y,  result.y);
+    atomicAdd(&output_buffer[screen_index].z,  result.z);
+    atomicAdd(&output_buffer[screen_index].w,  samples_per_pass);
+
+    atomicAdd(&output_buffer2[screen_index].x,  result.x * result.x);
+    atomicAdd(&output_buffer2[screen_index].y,  result.y * result.y);
+    atomicAdd(&output_buffer2[screen_index].z,  result.z * result.z);
+    atomicAdd(&output_buffer2[screen_index].w,  samples_per_pass);
+
+    //output_buffer[screen_index] = make_float4( result / samples_per_pass, 1.0 );
+    //output_buffer2[screen_index] = make_float4( result * result / samples_per_pass, 1.0 );
 }
 
 rtDeclareVariable(PerRayData_pathtrace, current_prd, rtPayload, );
@@ -325,24 +335,25 @@ rtDeclareVariable(PerRayData_pathtrace, current_prd, rtPayload, );
 
 RT_PROGRAM void exception()
 {
-    output_buffer[launch_index] = make_float4(bad_color, 1.0f);
+    uint2 screen_index = make_uint2(launch_index.x, launch_index.y);
+    output_buffer[screen_index] = make_float4(bad_color, 1.0f);
 }
 
 
-//-----------------------------------------------------------------------------
+////-----------------------------------------------------------------------------
+////
+////  Miss program
+////
+////-----------------------------------------------------------------------------
 //
-//  Miss program
+//rtDeclareVariable(float3, bg_color, , );
 //
-//-----------------------------------------------------------------------------
-
-rtDeclareVariable(float3, bg_color, , );
-
-RT_PROGRAM void miss()
-{
-    current_prd.radiance = bg_color;
-    current_prd.done = true;
-    current_prd.t = 1000;
-    current_prd.isMissed = true;
-}
-
-
+//RT_PROGRAM void miss()
+//{
+//    current_prd.radiance = bg_color;
+//    current_prd.done = true;
+//    current_prd.t = 1000;
+//    current_prd.isMissed = true;
+//}
+//
+//

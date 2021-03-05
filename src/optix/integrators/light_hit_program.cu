@@ -22,14 +22,26 @@ rtDeclareVariable(unsigned int,     use_mis, , );
 
 RT_PROGRAM void diffuseEmitter()
 {
-    float NdotL = dot(geometric_normal, -ray.direction);
+    float3 ray_direction = ray.direction;
+    float3 ray_origin = ray.origin;
+
+    const float3 world_shading_normal = normalize(rtTransformNormal(RT_OBJECT_TO_WORLD, shading_normal));
+	const float3 world_geometric_normal = normalize( rtTransformNormal( RT_OBJECT_TO_WORLD, geometric_normal ) );
+	float3 ffnormal = faceforward( world_shading_normal, -ray_direction, world_geometric_normal );
+    LightParameter light = lights[lightId];
+
+    float3 normal = world_shading_normal;
+    if (light.isTwosided == 1){
+	    normal = ffnormal;
+	}
+
+    float NdotL = dot(normal, -ray_direction);
 
     if(prd.depth == 0 || use_mis == 0){
         prd.radiance = NdotL >= 0? emission_color : make_float3(0.f);
     } else {
-        LightParameter light = lights[lightId];
 
-        float lightPdfArea = pdf_light(hitTriIdx, ray.origin, ray.direction, light);
+        float lightPdfArea = pdf_light(hitTriIdx, ray_origin, ray_direction, light);
 
         // float A = light.area;//length(cross(light.v1, light.v2));
         float lightPdf = (hit_dist * hit_dist) / clamp(NdotL, 1.e-3f, 1.0f) * lightPdfArea;
