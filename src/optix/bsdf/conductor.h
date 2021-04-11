@@ -21,12 +21,13 @@
 #include "optix/common/sampling.h"
 #include "optix/common/material_parameters.h"
 #include "optix/bsdf/fresnel.h"
+#include "optix/bsdf/material_constants.h"
 #include "optix/bsdf/bsdf_sample.h"
 
 using namespace optix;
 namespace conductor
 {
-RT_CALLABLE_PROGRAM BSDFSample3f Sample(MaterialParameter &mat, const float3 &normal, const float3 &wi, unsigned int &seed)
+RT_CALLABLE_PROGRAM BSDFSample3f Sample(const MaterialParameter &mat, const float3 &wi, unsigned int &seed)
 {
     BSDFSample3f bs;
     if(wi.z < 0){
@@ -36,17 +37,17 @@ RT_CALLABLE_PROGRAM BSDFSample3f Sample(MaterialParameter &mat, const float3 &no
     }
     bs.wo = make_float3(-wi.x, -wi.y, wi.z);
     bs.pdf = 1.0f;
-    bs.weight = mat.albedo * fresnel::ConductorReflectance(mat.eta, mat.k, wi.z);
+    bs.weight = mat.albedo * fresnel::ConductorReflectance(eta, k, wi.z);
     bs.sampledLobe = BSDFLobe::SpecularReflectionLobe;
     return bs;
 }
 
-RT_CALLABLE_PROGRAM float3 Eval(MaterialParameter &mat, const float3 &normal, const float3 &wi, const float3 &wo)
+RT_CALLABLE_PROGRAM float3 Eval(const MaterialParameter &mat, const float3 &wi, const float3 &wo)
 {
     return make_float3(0.0f);
 }
 
-RT_CALLABLE_PROGRAM float Pdf(MaterialParameter &mat, const float3 &normal, const float3 &wi, const float3 &wo)
+RT_CALLABLE_PROGRAM float Pdf(const MaterialParameter &mat, const float3 &wi, const float3 &wo)
 {
     return 1.0f;
 }

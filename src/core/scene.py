@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 def add_transform(transformation_matrix, geometry_instance):
     if transformation_matrix is None:
         transformation_matrix = np.eye(4, dtype=np.float32)
+
     gg = GeometryGroup(children=[geometry_instance])
     gg.set_acceleration(Acceleration("Trbvh"))
 
@@ -156,10 +157,14 @@ class Scene:
                 elif material_parameter.type == "conductor":
                     geometry_instance = GeometryInstance(geometry, target_material)
                     geometry_instance['programId'] = np.array(3, dtype=np.int32)
+                    geometry_instance['eta'] = material_parameter.eta
+                    geometry_instance['k'] = material_parameter.k
                     geometry_instance['materialId'] = np.array(material_parameter.uuid, dtype=np.int32)
                 elif material_parameter.type == "roughconductor":
                     geometry_instance = GeometryInstance(geometry, target_material)
                     geometry_instance['programId'] = np.array(4, dtype=np.int32)
+                    geometry_instance['eta'] = material_parameter.eta
+                    geometry_instance['k'] = material_parameter.k
                     geometry_instance['materialId'] = np.array(material_parameter.uuid, dtype=np.int32)
                 elif material_parameter.type == "plastic":
                     geometry_instance = GeometryInstance(geometry, target_material)

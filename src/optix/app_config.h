@@ -1,0 +1,4 @@
+#ifndef APP_CONFIG_H
+#define APP_CONFIG_H
+#define USE_NEXT_EVENT_ESTIMATION 0
+#endif

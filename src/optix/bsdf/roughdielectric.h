@@ -29,8 +29,7 @@ using namespace optix;
 namespace roughdielectric
 {
 
-RT_CALLABLE_PROGRAM BSDFSample3f SampleBase(MaterialParameter &mat, bool sampleR, bool sampleT,
-    const float3 &normal, const float3 &wi, unsigned int &seed)
+RT_CALLABLE_PROGRAM BSDFSample3f SampleBase(const MaterialParameter &mat, bool sampleR, bool sampleT, const float3 &wi, unsigned int &seed)
 {
     BSDFSample3f bs;
     bs.pdf = 1.0;
@@ -117,13 +116,12 @@ RT_CALLABLE_PROGRAM BSDFSample3f SampleBase(MaterialParameter &mat, bool sampleR
     return bs;
 }
 
-RT_CALLABLE_PROGRAM BSDFSample3f Sample(MaterialParameter &mat,
-    const float3 &normal, const float3 &wi, unsigned int &seed)
+RT_CALLABLE_PROGRAM BSDFSample3f Sample(const MaterialParameter &mat, const float3 &wi, unsigned int &seed)
 {
-    return SampleBase(mat, true, true, normal, wi, seed);
+    return SampleBase(mat, true, true, wi, seed);
 }
 
-RT_CALLABLE_PROGRAM float3 Eval(MaterialParameter &mat, const float3 &normal, const float3 &wi, const float3 &wo)
+RT_CALLABLE_PROGRAM float3 Eval(const MaterialParameter &mat, const float3 &wi, const float3 &wo)
 {
     float ior = mat.intIOR / mat.extIOR;
     float alpha  = mat.roughness;
@@ -155,8 +153,7 @@ RT_CALLABLE_PROGRAM float3 Eval(MaterialParameter &mat, const float3 &normal, co
     }
 }
 
-RT_CALLABLE_PROGRAM float PdfBase(MaterialParameter &mat, bool sampleR, bool sampleT,
-const float3 &normal, const float3 &wi, const float3 &wo){
+RT_CALLABLE_PROGRAM float PdfBase(const MaterialParameter &mat, bool sampleR, bool sampleT, const float3 &wi, const float3 &wo){
     float ior = mat.intIOR / mat.extIOR;
     DistributionEnum dist = static_cast<DistributionEnum>(mat.distribution_type);
     float wiDotN = wi.z;
@@ -194,8 +191,8 @@ const float3 &normal, const float3 &wi, const float3 &wo){
     return pdf;
 }
 
-RT_CALLABLE_PROGRAM float Pdf(MaterialParameter &mat, const float3 &normal, const float3 &wi, const float3 &wo)
+RT_CALLABLE_PROGRAM float Pdf(const MaterialParameter &mat, const float3 &wi, const float3 &wo)
 {
-    return PdfBase(mat, true, true, normal, wi, wo);
+    return PdfBase(mat, true, true, wi, wo);
 }
 }

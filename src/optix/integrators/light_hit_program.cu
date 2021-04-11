@@ -22,8 +22,8 @@ rtDeclareVariable(unsigned int,     use_mis, , );
 
 RT_PROGRAM void diffuseEmitter()
 {
-    float3 ray_direction = ray.direction;
     float3 ray_origin = ray.origin;
+    float3 ray_direction = ray.direction;
 
     const float3 world_shading_normal = normalize(rtTransformNormal(RT_OBJECT_TO_WORLD, shading_normal));
 	const float3 world_geometric_normal = normalize( rtTransformNormal( RT_OBJECT_TO_WORLD, geometric_normal ) );
@@ -51,6 +51,7 @@ RT_PROGRAM void diffuseEmitter()
     }
     prd.t = hit_dist;
     prd.done = true;
+    prd.origin = ray_origin + hit_dist * ray_direction;
 }
 
 RT_PROGRAM void any_hit()

@@ -29,238 +29,396 @@ import pandas as pd
 import json
 
 
-def make_reference_image_multiple(scale=1, scene_names=None, diffuse_only=False):
-	renderer = Renderer(scale=scale)
-	root_path = "../scene"
-	if scene_names is None:
-		scene_names = [os.path.relpath(f.path, root_path) for f in os.scandir(root_path) if f.is_dir()]
-		scene_names.sort()
-	print(scene_names)
-	diffuse_folder = "diffuse_only" if diffuse_only else "standard"
-	target_folder = '../reference_images/%s/scale_%d' % (diffuse_folder, scale)
+def make_reference_image_multiple(scene_names=None, scale=1, diffuse_only=False):
+    renderer = Renderer(scale=scale)
+    root_path = "../scene"
+    if scene_names is None:
+        scene_names = [os.path.relpath(f.path, root_path) for f in os.scandir(root_path) if f.is_dir()]
+        scene_names.sort()
+    print(scene_names)
+    diffuse_folder = "diffuse_only" if diffuse_only else "standard"
+    target_folder = '../reference_images/%s/scale_%d' % (diffuse_folder, scale)
 
-	if not os.path.exists(target_folder):
-		os.makedirs(target_folder)
-	for scene_name in scene_names:
-		common_params = {
-			'scene_name': scene_name,
-			'spp': 4096 * 16,
-			'samples_per_pass': 128 * scale * scale,
-			'max_depth': 16,
-			'rr_begin_depth': 16,
-		}
-		try:
-			image = renderer.render(**common_params, use_mis=False)
-			file_name = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-			save_pred_images(image['image'], "%s/%s_%s" % (target_folder, scene_name, file_name))
-		except Exception:
-			print("Error")
+    if not os.path.exists(target_folder):
+        os.makedirs(target_folder)
+    for scene_name in scene_names:
+        common_params = {
+            'scene_name': scene_name,
+            'spp': 4096 * 32,
+            'samples_per_pass': 128 * scale * scale,
+            'max_depth': 32,
+            'rr_begin_depth': 32,
+        }
+        try:
+            image = renderer.render(**common_params, use_mis=False)
+            file_name = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            save_pred_images(image['image'], "%s/%s_%s" % (target_folder, scene_name, file_name))
+        except Exception:
+            print("Error")
 
 
 def make_reference_image_single(scene_name, scale=4, force_all_diffuse=False):
-	renderer = Renderer(scale=scale, force_all_diffuse=force_all_diffuse)
-	common_params = {
-		'scene_name': scene_name,
-		'spp': 1024,
-		'samples_per_pass': 32,
-		'max_depth': 8,
-		'rr_begin_depth': 8,
+    renderer = Renderer(scale=scale, force_all_diffuse=force_all_diffuse)
+    common_params = {
+        'scene_name': scene_name,
+        'spp': 1024,
+        'samples_per_pass': 64,
+        'max_depth': 8,
+        'rr_begin_depth': 8,
 
-		# You should change q_table_old at getQValue to q_table
-		'accumulative_q_table_update': True
-	}
-	image = renderer.render(**common_params, use_mis=False, show_picture=True)
-	file_name = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        # You should change q_table_old at getQValue to q_table
+        'accumulative_q_table_update': True
+    }
+    image = renderer.render(**common_params, use_mis=False, show_picture=True)
+    file_name = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-	#save_pred_images(image['image'], "../reference_images2/%s_%s" % (scene_name, file_name))
+
+# save_pred_images(image['image'], "../reference_images2/%s_%s" % (scene_name, file_name))
 
 
 def test_multiple_and_export_result(scene_list, scale, output_folder, test_time=False):
-	for scene in scene_list:
-		try:
-			test(scene, scale, test_time=test_time, show_result=False, output_folder=output_folder)
-		except Exception:
-			print("Scene Error")
+    for scene in scene_list:
+        #try:
+        test(scene, scale, test_time=test_time, show_result=False, output_folder=output_folder)
+        #except Exception:
+        #    print("Scene Error")
 
-	update_total_result(output_folder)
+    update_total_result(output_folder)
+
+
+def test_spherical(scene_name, scale=4):
+    reference_parent_folder = '../reference_images/%s/scale_%d' % ("standard", scale)
+    ref_image = load_reference_image(reference_parent_folder, scene_name)
+
+    renderer = Renderer(scale=scale, force_all_diffuse=False)
+    renderer.reference_image = ref_image
+    n_cube = 8
+    n_uv = 32
+    coord = (2, 7, 4)
+    common_params = {'scene_name': scene_name, 'samples_per_pass': 16, 'show_picture': True, 'max_depth': 16,
+                     'rr_begin_depth': 8, 'scene_epsilon': 1e-5, 'accumulative_q_table_update': True, 'uv_n': n_uv,
+                     'n_cube': n_cube, 'spp': 2048}
+
+    # pos = np.array(coord, dtype=np.float32) / n_cube
+    # size = np.array([1 / n_cube] * 3, dtype=np.float32)
+    # renderer.render(**common_params, spherical_pos=pos, spherical_size=size, spherical_map_type=0)
+    # renderer.render(**common_params, spherical_pos=pos, spherical_size=size, spherical_map_type=1)
+    # result = renderer.render(**common_params, sample_type=SAMPLE_COSINE,
+    #                          force_update_q_table=True,
+    #                          directional_mapping_method="cylindrical",
+    #                          q_table_update_method=Q_UPDATE_MONTE_CARLO)
+
+    result = renderer.render(**common_params,
+                             sample_type=SAMPLE_Q_QUADTREE,
+                             force_update_q_table=True,
+                             directional_mapping_method="cylindrical",
+                             directional_type="quadtree",
+                             q_table_update_method=Q_UPDATE_MONTE_CARLO)
+    result['q_table_info'].visualize_q_table(coord)
+
+
+# coo = result["q_table_visit_count_final"].reshape((n_cube, n_cube, n_cube, -1))
+# coo = np.sum(coo, axis=3)
+# print(coo.shape)
+# print(np.unravel_index(coo.argmax(), coo.shape))
+# print(np.argmax(coo))
+#
+# def visualize(name="q_table_final"):
+# 	q_table = result[name]
+# 	q_table = q_table.reshape((n_cube, n_cube, n_cube, n_uv * 2, n_uv))
+# 	plt.figure()
+# 	A = q_table[coord[2], coord[1], coord[0], :]
+# 	print(A)
+# 	print(A.shape)
+# 	plt.imshow(A)
+# 	plt.show()
+#
+# visualize("q_table_final")
+# visualize("q_table_visit_count_final")
 
 
 def test(scene_name, scale=4, test_time=False, show_picture=False, show_result=False,
-		 output_folder=None, force_all_diffuse=False):
-	diffuse_folder = "diffuse_only" if force_all_diffuse else "standard"
-	reference_parent_folder = '../reference_images/%s/scale_%d' % (diffuse_folder, scale)
+         output_folder=None, force_all_diffuse=False):
+    diffuse_folder = "diffuse_only" if force_all_diffuse else "standard"
+    reference_parent_folder = '../reference_images/%s/scale_%d' % (diffuse_folder, scale)
 
-	ref_image = load_reference_image(reference_parent_folder, scene_name)
+    ref_image = load_reference_image(reference_parent_folder, scene_name)
 
-	total_results = OrderedDict()
-	renderer = Renderer(scale=scale, force_all_diffuse=force_all_diffuse)
-	renderer.reference_image = ref_image
+    total_results = OrderedDict()
+    renderer = Renderer(scale=scale, force_all_diffuse=force_all_diffuse)
+    renderer.reference_image = ref_image
 
-	common_params = {
-		'scene_name': scene_name,
-		'samples_per_pass': 16,
-		'show_picture': show_picture,
-		'max_depth': 16,
-		'rr_begin_depth': 8,
-		'scene_epsilon': 1e-5,
-		# You should change q_table_old at getQValue to q_table
-		'accumulative_q_table_update': True
-	}
+    common_params = {
+        'scene_name': scene_name,
+        'samples_per_pass': 8,
+        'show_picture': show_picture,
+        'max_depth': 16,
+        'rr_begin_depth': 8,
+        'scene_epsilon': 1e-5,
+        # You should change q_table_old at getQValue to q_table
+        'accumulative_q_table_update': True,
+        'uv_n': 16,
+        'n_cube': 16,
+        #'spatial_type':'octree'
+    }
 
-	if test_time:
-		time_limit_in_secs = {1:60, 2:20, 4:5}
-		common_params['time_limit_in_sec'] = time_limit_in_secs[scale]
-	else:
-		common_params['spp'] = 1024
-	common_params['time_limit_init_ignore_step'] = 10
+    if test_time:
+        time_limit_in_secs = {1: 60, 2: 20, 4: 5}
+        common_params['time_limit_in_sec'] = time_limit_in_secs[scale]
+    else:
+        common_params['spp'] = 256
+    common_params['time_limit_init_ignore_step'] = 10
+    # renderer.construct_stree(scene_name, max_octree_depth=4, max_path_depth=3)
+    #
+    # result = renderer.render(**common_params, sample_type=SAMPLE_COSINE, force_update_q_table=True)
+    # normals = result['q_table_info'].q_table_normal_counts
+    # normals = normals.astype(np.float32)
+    # print(normals[122])
+    # print(normals.dtype)
+    # normals /= (np.sum(normals, axis=1, keepdims=True, dtype=np.float32) + 0.0001)
+    # normals_stdev = np.std(normals, axis=1)
+    # print(normals_stdev)
 
-	total_results["brdf"] = renderer.render(**common_params, sample_type=SAMPLE_COSINE)
-	total_results["q"] = renderer.render(**common_params, sample_type=SAMPLE_Q_PROPORTION)
-	total_results["q_brdf"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION)
-	total_results["q_brdf_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, q_table_update_method=Q_UPDATE_SARSA)
-	total_results["q_brdf_rej"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT)
-	total_results["q_brdf_rej_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT, q_table_update_method=Q_UPDATE_SARSA)
-	total_results["q_brdf_mcmc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC)
-	total_results["q_brdf_mcmc_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC, q_table_update_method=Q_UPDATE_SARSA)
+    total_results["brdf"] = renderer.render(**common_params, sample_type=SAMPLE_COSINE)
+    # total_results["q"] = renderer.render(**common_params, sample_type=SAMPLE_Q_PROPORTION)
+    # total_results["q_brdf_expected_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, q_table_update_method=Q_UPDATE_EXPECTED_SARSA)
+    # total_results["q_brdf_mc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, q_table_update_method=Q_UPDATE_MONTE_CARLO)
+    # total_results["q_brdf_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, q_table_update_method=Q_UPDATE_SARSA)
 
-	if show_result:
-		show_result_bar(total_results, "error_mean")
-		show_result_bar(total_results, "elapsed_time_per_spp")
-		show_result_bar(total_results, "elapsed_time_except_init")
+    total_results["q_brdf_rej_expected_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT, q_table_update_method=Q_UPDATE_EXPECTED_SARSA)
+    total_results["q_brdf_rej_mc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT, q_table_update_method=Q_UPDATE_MONTE_CARLO)
+    total_results["q_brdf_rej_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT, q_table_update_method=Q_UPDATE_SARSA)
 
-		show_result_bar(total_results, "total_hit_percentage")
-		if test_time:
-			show_result_bar(total_results, "completed_samples")
-		show_result_sequence(total_results, "hit_count_sequence")
-		show_result_sequence(total_results, "elapsed_times")
+    # total_results["q_brdf_mcmc_expected_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC, q_table_update_method=Q_UPDATE_EXPECTED_SARSA)
+    # total_results["q_brdf_mcmc_mc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC, q_table_update_method=Q_UPDATE_MONTE_CARLO)
+    # total_results["q_brdf_mcmc_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC, q_table_update_method=Q_UPDATE_SARSA)
 
-	if output_folder is not None:
-		scene_output_folder = "%s/%s" % (output_folder, scene_name)
+    # total_results["q_sphere"] = renderer.render(**common_params, sample_type=SAMPLE_Q_SPHERE)
+    # total_results["q_sphere_reject"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT)
+    # total_results["q_sphere_mcmc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC)
 
-		# export images
-		if not os.path.exists(scene_output_folder):
-			os.makedirs(scene_output_folder)
-		for k, v in total_results.items():
-			save_pred_images(v['image'], "%s/images/%s" % (scene_output_folder, k))
+    #total_results["oct_q"] = renderer.render(**common_params, sample_type=SAMPLE_Q_PROPORTION, spatial_type='octree')
+    #total_results["oct_q_brdf"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, spatial_type='octree')
+    #total_results["oct_q_sphere"] = renderer.render(**common_params, sample_type=SAMPLE_Q_SPHERE, spatial_type='octree')
 
-		# export csv
-		df = pd.DataFrame(total_results)
-		df.drop(["image", "elapsed_times", "hit_count_sequence"], inplace=True)
-		df.to_csv("%s/result.csv" % scene_output_folder)
+    #total_results["q_quadtree"] = renderer.render(**common_params, sample_type=SAMPLE_COSINE, directional_type='quadtree', force_update_q_table=True)
 
-		# export json
-		with open('%s/setting.json' % scene_output_folder, 'w') as fp:
-			json.dump(common_params, fp)
-		return df
+    #total_results["q_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_PROPORTION, q_table_update_method=Q_UPDATE_SARSA)
+    #total_results["q_brdf_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, q_table_update_method=Q_UPDATE_SARSA)
+    #total_results["q_mc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_PROPORTION, q_table_update_method=Q_UPDATE_MONTE_CARLO)
+    #total_results["q_brdf_mc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, q_table_update_method=Q_UPDATE_MONTE_CARLO)
 
-	return total_results
+    #total_results["q_sphere"] = renderer.render(**common_params, sample_type=SAMPLE_Q_SPHERE)
+    #total_results["q_quad"] = renderer.render(**common_params, directional_type='quadtree',
+    #                                          q_table_update_method=Q_UPDATE_SARSA)
+
+    # total_results["q_oct"] = renderer.render(**common_params, sample_type=SAMPLE_Q_PROPORTION, spatial_type='octree')
+    # total_results["q_brdf_oct"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, spatial_type='octree')
+
+    # total_results["q_brdf_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, q_table_update_method=Q_UPDATE_SARSA)
+    # total_results["q_brdf_rej"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT)
+    # total_results["q_brdf_rej_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT, q_table_update_method=Q_UPDATE_SARSA)
+    # total_results["q_brdf_mcmc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC)
+    # total_results["q_brdf_mcmc_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC, q_table_update_method=Q_UPDATE_SARSA)
+
+    if show_result:
+        show_result_bar(total_results, "error_mean")
+        show_result_bar(total_results, "elapsed_time_per_sample")
+        show_result_bar(total_results, "elapsed_time_per_sample_except_init")
+
+        show_result_bar(total_results, "total_hit_percentage")
+        if test_time:
+            show_result_bar(total_results, "completed_samples")
+        show_result_sequence(total_results, "hit_count_sequence")
+        show_result_sequence(total_results, "elapsed_times")
+
+    if output_folder is not None:
+        scene_output_folder = "%s/%s" % (output_folder, scene_name)
+
+        # export images
+        if not os.path.exists(scene_output_folder):
+            os.makedirs(scene_output_folder)
+        for k, v in total_results.items():
+            save_pred_images(v['image'], "%s/images/%s" % (scene_output_folder, k))
+
+        # export csv
+        df = pd.DataFrame(total_results)
+        df.drop(["image", "elapsed_times", "hit_count_sequence", "q_table_info"], inplace=True)
+        df.to_csv("%s/result.csv" % scene_output_folder)
+
+        # export json
+        with open('%s/setting.json' % scene_output_folder, 'w') as fp:
+            json.dump(common_params, fp)
+        return df
+
+    return total_results
 
 
 def test2(scene_name, scale=4, test_time=False, show_picture=False, show_result=False,
-		 output_folder=None, force_all_diffuse=False):
-	diffuse_folder = "diffuse_only" if force_all_diffuse else "standard"
-	reference_parent_folder = '../reference_images/%s/scale_%d' % (diffuse_folder, scale)
+          output_folder=None, force_all_diffuse=False, sample_type_name=None, **kwargs):
+    diffuse_folder = "diffuse_only" if force_all_diffuse else "standard"
+    reference_parent_folder = '../reference_images/%s/scale_%d' % (diffuse_folder, scale)
 
-	ref_image = load_reference_image(reference_parent_folder, scene_name)
+    ref_image = load_reference_image(reference_parent_folder, scene_name)
 
-	total_results = OrderedDict()
-	renderer = Renderer(scale=scale, force_all_diffuse=force_all_diffuse)
-	renderer.reference_image = ref_image
+    total_results = OrderedDict()
+    renderer = Renderer(scale=scale, force_all_diffuse=force_all_diffuse)
+    renderer.reference_image = ref_image
 
-	common_params = {
-		'scene_name': scene_name,
-		'samples_per_pass': 32,
-		'show_picture': show_picture,
-		'max_depth': 8,
-		'rr_begin_depth': 8,
-		'scene_epsilon': 1e-3,
-		# You should change q_table_old at getQValue to q_table
-		'accumulative_q_table_update': True
-	}
+    common_params = {
+        'scene_name': scene_name,
+        'samples_per_pass': 16,
+        'show_picture': show_picture,
+        'max_depth': 16,
+        'rr_begin_depth': 8,
+        'scene_epsilon': 1e-5,
+        # You should change q_table_old at getQValue to q_table
+        'accumulative_q_table_update': True
+    }
 
-	if test_time:
-		time_limit_in_secs = {1:60, 2:40, 4:10}
-		common_params['time_limit_in_sec'] = time_limit_in_secs[scale]
-	else:
-		common_params['spp'] = 1024
-	common_params['time_limit_init_ignore_step'] = 10
+    if test_time:
+        time_limit_in_secs = {1: 60, 2: 20, 4: 5}
+        common_params['time_limit_in_sec'] = time_limit_in_secs[scale]
+    else:
+        common_params['spp'] = 1024
+    common_params['time_limit_init_ignore_step'] = 10
 
-	total_results["brdf"] = renderer.render(**common_params, sample_type=SAMPLE_COSINE)
-	#total_results["q"] = renderer.render(**common_params, sample_type=SAMPLE_Q_PROPORTION)
-	# total_results["q_brdf"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION)
-	# total_results["q_brdf_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, q_table_update_method=Q_UPDATE_SARSA)
-	# total_results["q_brdf_rej"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT)
-	# total_results["q_brdf_rej_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT, q_table_update_method=Q_UPDATE_SARSA)
-	# total_results["q_brdf_mcmc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC)
-	# total_results["q_brdf_mcmc_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC, q_table_update_method=Q_UPDATE_SARSA)
+    total_results["uniform"] = renderer.render(**common_params, sample_type=SAMPLE_UNIFORM)
+    total_results["brdf"] = renderer.render(**common_params, sample_type=SAMPLE_COSINE)
+    n_cubes = [16, 14, 12, 10, 8, 6, 4]
+    n_uvs = [16, 14, 12, 10, 8, 6, 4]
+    print(kwargs)
+    for n_c in n_cubes:
+        for uv in n_uvs:
+            total_results["%s_c_%d_uv_%d" % (sample_type_name, n_c, uv)] \
+                = renderer.render(**common_params, uv_n=uv, n_cube=n_c, **kwargs)
 
-	if show_result:
-		show_result_bar(total_results, "error_mean")
-		show_result_bar(total_results, "elapsed_time_per_spp")
-		show_result_bar(total_results, "elapsed_time_except_init")
+    if show_result:
+        show_result_bar(total_results, "error_mean")
+        show_result_bar(total_results, "elapsed_time_per_sample")
+        show_result_bar(total_results, "elapsed_time_per_sample_except_init")
 
-		show_result_bar(total_results, "total_hit_percentage")
-		if test_time:
-			show_result_bar(total_results, "completed_samples")
-		show_result_sequence(total_results, "hit_count_sequence")
-		show_result_sequence(total_results, "elapsed_times")
+        show_result_bar(total_results, "total_hit_percentage")
+        if test_time:
+            show_result_bar(total_results, "completed_samples")
+        show_result_sequence(total_results, "hit_count_sequence")
+        show_result_sequence(total_results, "elapsed_times")
 
-	if output_folder is not None:
-		scene_output_folder = "%s/%s" % (output_folder, scene_name)
+    if output_folder is not None:
+        scene_output_folder = "%s/%s" % (output_folder, scene_name)
 
-		# export images
-		if not os.path.exists(scene_output_folder):
-			os.makedirs(scene_output_folder)
-		for k, v in total_results.items():
-			save_pred_images(v['image'], "%s/images/%s" % (scene_output_folder, k))
+        # export images
+        if not os.path.exists(scene_output_folder):
+            os.makedirs(scene_output_folder)
+        for k, v in total_results.items():
+            save_pred_images(v['image'], "%s/images/%s" % (scene_output_folder, k))
 
-		# export csv
-		df = pd.DataFrame(total_results)
-		df.drop(["image", "elapsed_times", "hit_count_sequence"], inplace=True)
-		df.to_csv("%s/result.csv" % scene_output_folder)
+        # export csv
+        df = pd.DataFrame(total_results)
+        df.drop(["image", "elapsed_times", "hit_count_sequence"], inplace=True)
+        df.to_csv("%s/result.csv" % scene_output_folder)
 
-		# export json
-		with open('%s/setting.json' % scene_output_folder, 'w') as fp:
-			json.dump(common_params, fp)
-		return df
+        # export json
+        with open('%s/setting.json' % scene_output_folder, 'w') as fp:
+            json.dump(common_params, fp)
+        return df
 
-	return total_results
+    return total_results
 
+
+if __name__ == '__main2__':
+    # Compiler.clean()
+    # Compiler.keep_device_function = False
+    # file_dir = os.path.dirname(os.path.abspath(__file__))
+    # Compiler.add_program_directory(file_dir)
+    file_dir = os.path.dirname(os.path.abspath(__file__))
+    Compiler.add_program_directory(file_dir)
+    renderer = Renderer(scale=4)
+    renderer.construct_stree('cornell-box', max_path_depth=2, max_octree_depth=6)
+
+# if __name__ == '__main__':
+# 	b = np.zeros((3,3))
+# 	a = b[1]
+# 	b = np.ones((3,3))
+# 	print(a)
+# 	print(b)
 
 if __name__ == '__main__':
-	Compiler.add_program_directory(dirname(__file__))
-	make_reference_image_single("cornell-box", scale=2, force_all_diffuse=False)
-	#test2("cornell-box", scale=2, force_all_diffuse=False, show_picture=True)
-	#make_reference_image_single("veach-ajar", scale=4, force_all_diffuse=True)
 
-	#make_reference_image_single("veach_door_simple", scale=2)
-	#make_reference_image_multiple(scale=1, scene_names=["veach_door_simple"])
-	all_scenes = ['bathroom', 'bathroom2',  'bedroom', 'cornell-box', 'kitchen',
-				  'living-room', 'living-room-2', 'living-room-3', 'staircase','staircase2',
-				  'veach-ajar',"veach_door_simple"]
-	#test_multiple_and_export_result(all_scenes, 1, "../result_accum/scale_1_spp_1024", test_time=False)
-	#test_multiple_and_export_result(all_scenes, 1, "../result_accum/scale_1_time_60", test_time=True)
-	#test_multiple_and_export_result(all_scenes, 2, "../result_non_accum/scale_2_time_40", test_time=True)
-	#test_multiple_and_export_result(all_scenes, 2, "../result_non_accum/scale_2_spp_1024", test_time=False)
-	#test_multiple_and_export_result(all_scenes, 1, "../result_accum/scale_1_spp_1024", test_time=False)
-	#test_multiple_and_export_result(all_scenes, 1, "../result_accum/scale_1_spp_1024", test_time=True)
+    Compiler.clean()
+    Compiler.keep_device_function = False
 
-	#test_multiple_and_export_result(all_scenes, 4, "../result_accum/scale_4_time_5", test_time=True)
+    file_dir = os.path.dirname(os.path.abspath(__file__))
+    Compiler.add_program_directory(file_dir)
+    # make_reference_image_single("cornell-box", scale=2, force_all_diffuse=False)
+    # test2("cornell-box", scale=4, force_all_diffuse=False, show_picture=False, show_result=True)
 
-	#update_total_result("../result/scale_4")
-	#all_scenes2 = ['living-room-2', 'living-room-3', 'staircase2', 'veach-ajar']
-	# all_scenes = ['cornell-box']
-	# make_reference_image(scale=8, scene_names=all_scenes)
-	#make_reference_image_multiple(scale=4, scene_names=all_scenes)
-	#make_reference_image_multiple(scale=2, scene_names=all_scenes)
-	# make_reference_image(scale=1, scene_names=all_scenes)
+    # make_reference_image_single("veach-ajar", scale=4, force_all_diffuse=True)
 
-	# make_reference_image_single("bathroom")
+    # make_reference_image_single("veach_door_simple", scale=2)
+    # make_reference_image_multiple(scale=4, scene_names=["cornell-box-hard"])
+    all_scenes1 = ['cornell-box', 'cornell-box-hard', "veach_door_simple"]
+    all_scenes = all_scenes1 + ['bathroom', 'bathroom2', 'bedroom',  'kitchen',
+                  'living-room', 'living-room-2', 'living-room-3', 'staircase', 'staircase2',
+                  'veach-ajar']
+    #make_reference_image_multiple(scale=4, scene_names=all_scenes)
 
-	#test2("veach_door_simple", scale=4, show_result=True, show_picture=True, test_time=False, force_all_diffuse=False)
-	#test2("bathroom", scale=4, show_result=True, show_picture=True, test_time=False, force_all_diffuse=False)
+    total_dict = OrderedDict()
+    #update_total_result("../result_0411_1/scale_4_time_5", test_time=True)
+    test_multiple_and_export_result(all_scenes, 4, "../result_0411_3/scale_4_time_5", test_time=True)
+    test_multiple_and_export_result(all_scenes, 4, "../result_0411_3/scale_4_spp_256", test_time=False)
 
-	#make_reference_image_single("cornell-box-hard", scale=2)
-	#test("cornell-box", scale=2)
-	#make_reference_image_single("staircase")
-	#test("bedroom")
+    # test("cornell-box-hard", 4, test_time=True, show_picture=True, show_result=True)
+    # test_spherical("cornell-box", 4)
+
+# total_dict["q_brdf_sarsa"] = {'sample_type': SAMPLE_Q_COS_PROPORTION, 'q_table_update_method': Q_UPDATE_SARSA}
+# total_dict["q_brdf_rej"] = {'sample_type': SAMPLE_Q_COS_REJECT}
+# total_dict["q_brdf_rej_sarsa"] = {'sample_type': SAMPLE_Q_COS_REJECT, 'q_table_update_method': Q_UPDATE_SARSA}
+# total_dict["q_brdf_mcmc"] = {'sample_type': SAMPLE_Q_COS_MCMC}
+# total_dict["q_brdf_mcmc_sarsa"] = {'sample_type': SAMPLE_Q_COS_MCMC, 'q_table_update_method': Q_UPDATE_SARSA}
+# total_dict["q"] = {'sample_type': SAMPLE_Q_PROPORTION}
+# total_dict["q_brdf"] = {'sample_type': SAMPLE_Q_COS_PROPORTION}
+
+# output_folder = '../test_20210311_n_cube_all'
+# for k, v in total_dict.items():
+# 	# Equal Sample
+# 	for s in all_scenes:
+# 		test2(s, scale=4, test_time=False, output_folder="%s/%s_equal_sample" % (output_folder, k), sample_type_name=k, **v)
+# 	update_total_result("%s/%s_equal_sample" % (output_folder, k), False)
+#
+# 	# Equal Time
+# 	for s in all_scenes:
+# 		test2(s, scale=4, test_time=True, output_folder="%s/%s_equal_time" % (output_folder, k), sample_type_name=k, **v)
+# 	update_total_result("%s/%s_equal_time" % (output_folder, k), True)
+
+# test_multiple_and_export_result(all_scenes, 1, "../result_accum/scale_1_spp_1024", test_time=False)
+# test_multiple_and_export_result(all_scenes, 1, "../result_accum/scale_1_time_60", test_time=True)
+# test_multiple_and_export_result(all_scenes, 2, "../result_non_accum/scale_2_time_40", test_time=True)
+# test_multiple_and_export_result(all_scenes, 2, "../result_non_accum/scale_2_spp_1024", test_time=False)
+# all_scenes2 = ["veach_door_simple"]
+# test_multiple_and_export_result(all_scenes, 4, "../result_accum_0309_1/scale_4_spp_1024", test_time=False)
+# test_multiple_and_export_result(all_scenes2, 4, "../result_accum_0308_3/scale_4_time_5", test_time=True)
+
+# make_reference_image_multiple(scene_names=all_scenes, scale=4)
+# make_reference_image_multiple(scene_names=all_scenes, scale=2)
+# make_reference_image_multiple(scene_names=all_scenes, scale=1)
+
+# test_multiple_and_export_result(all_scenes, 4, "../result_accum/scale_4_time_5", test_time=True)
+
+# update_total_result("../result/scale_4")
+# all_scenes2 = ['living-room-2', 'living-room-3', 'staircase2', 'veach-ajar']
+# all_scenes = ['cornell-box']
+# make_reference_image(scale=8, scene_names=all_scenes)
+# make_reference_image_multiple(scale=4, scene_names=all_scenes)
+# make_reference_image_multiple(scale=2, scene_names=all_scenes)
+# make_reference_image(scale=1, scene_names=all_scenes)
+
+# make_reference_image_single("bathroom")
+
+# test2("veach_door_simple", scale=4, show_result=True, show_picture=True, test_time=False, force_all_diffuse=False)
+# test2("bathroom", scale=4, show_result=True, show_picture=True, test_time=False, force_all_diffuse=False)
+
+# make_reference_image_single("cornell-box-hard", scale=2)
+# test("cornell-box", scale=2)
+# make_reference_image_single("staircase")
+# test("bedroom")

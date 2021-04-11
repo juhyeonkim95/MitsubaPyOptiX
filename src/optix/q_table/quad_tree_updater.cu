@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (c) 2018 NVIDIA CORPORATION. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -25,49 +25,30 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#pragma once
-
 #include <optixu/optixu_math_namespace.h>
+
+//#include "optix/common/helpers.h"
+//#include "optix/q_table/data_structure.cuh"
+
+//rtBuffer<unsigned int, 2>     dtree_index_array;
+//rtBuffer<unsigned int, 2>     dtree_rank_array;
+//rtBuffer<unsigned int, 2>     value_array;
+//rtBuffer<unsigned int, 2>     depth_array;
+
 using namespace optix;
 
+
+rtDeclareVariable(uint,         launch_index, rtLaunchIndex, );
+
+RT_PROGRAM void quad_tree_updater(){
+//    float irradiance = 0;
+//    for(int i=0; i<current_size; i++){
+//        if(dtree_rank_array[make_uint2(i, launch_index)] == 0){
+//            irradiance += value_array[i] * pow(0.5, depth_array);
+//        }
+//    }
 //
-// Common definitions shared by host and device code
-//
-
-struct RayData
-{
-  float3 origin;
-  float  tmin;
-  float3 dir;
-  float  tmax;
-};
-
-struct Hit
-{
-  float t;
-  float3 geom_normal;
-  float3 hit_point;
-  float3 color;
-  float3 attenuation;
-  float3 new_direction;
-  float pdf;
-  unsigned int done;
-  unsigned int seed;
-  float3 result;
-};
-
-//struct Ray
-//{
-//    float3 result;
-//    float3 radiance;
-//    float3 attenuation;
-//    float3 origin;
-//    float3 direction;
-//    float3 normal;
-//    float3 diffuse_color;
-//    unsigned int seed;
-//    int depth;
-//    int countEmitted;
-//    int done;
-//};
+//    for(int i=0; i<100; i++){
+//        dtree_index_array[make_uint2(i, launch_index)] += 1;
+//    }
+}

@@ -32,6 +32,30 @@
 #include "optix/common/rt_function.h"
 
 using namespace optix;
+
+// Mapping function
+
+// (1) Cylindrical (1, 1)
+static __host__ __device__ float3 mapCanonicalToDirection(float2 p) {
+    const float cosTheta = 2 * p.x - 1;
+    const float phi = 2 * M_PI * p.y;
+
+    const float sinTheta = sqrt(1 - cosTheta * cosTheta);
+    float sinPhi = sinf(phi);
+    float cosPhi = cosf(phi);
+
+    return make_float3(sinTheta * cosPhi, sinTheta * sinPhi, cosTheta);
+}
+
+static __host__ __device__ float2 mapDirectionToCanonical(float3 direction)
+{
+    const float cosTheta = min(max(direction.z, -1.0f), 1.0f);
+    float phi = atan2(direction.y, direction.x);
+    phi = phi < 0 ? phi + 2.0 * M_PIf : phi;
+    return make_float2((cosTheta + 1) * 0.5, phi / (2 * M_PIf));
+}
+
+// (2) Shirley (2, 1)
 static __host__ __device__ float3 mapUVToDirection(float2 uv)
 {
     float x = 2 * uv.x - 1;
@@ -65,15 +89,6 @@ static __host__ __device__ float3 mapUVToDirection(float2 uv)
     theta = acos(1 - xx*xx);
     phi = (M_PIf/4) * (offset + (yy / xx));
     return make_float3(sinf(theta) * cosf(phi), cosf(theta), -sinf(theta) * sinf(phi));
-}
-
-static __host__ __device__ float3 mapThetaPhiToDirection(float2 thetaPhi)
-{
-    float theta = M_PIf * thetaPhi.x;
-    float phi = 2 * M_PIf * thetaPhi.y;
-
-    float3 direction = make_float3(sinf(theta) * cosf(phi), cosf(theta), -sinf(theta) * sinf(phi));
-    return direction;
 }
 
 static __host__ __device__ float2 mapDirectionToUV(float3 direction)
@@ -119,6 +134,37 @@ static __host__ __device__ float2 mapDirectionToUV(float3 direction)
     u = 0.5 * u + 0.5;
     v = 0.5 * v + 0.5;
     return make_float2(u, v);
+}
+
+static __host__ __device__ float3 mapUVToDirectionSphere(float2 uv){
+    bool inverted = false;
+    uv.x *= 2;
+    if(uv.x > 1){
+        uv.x -=1;
+        inverted = true;
+    }
+    float3 dir = mapUVToDirection(uv);
+    if(inverted){
+        dir.y *= -1;
+    }
+    return dir;
+}
+
+static __host__ __device__ float2 mapDirectionToUVSphere(float3 direction){
+    float2 uv = mapDirectionToUV(direction);
+    if(direction.y < 0){
+        uv.x += 1.0;
+    }
+    return uv;
+}
+
+static __host__ __device__ float3 mapThetaPhiToDirection(float2 thetaPhi)
+{
+    float theta = M_PIf * thetaPhi.x;
+    float phi = 2 * M_PIf * thetaPhi.y;
+
+    float3 direction = make_float3(sinf(theta) * cosf(phi), cosf(theta), -sinf(theta) * sinf(phi));
+    return direction;
 }
 
 

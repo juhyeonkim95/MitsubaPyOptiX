@@ -30,7 +30,7 @@ using namespace optix;
 
 namespace roughplastic
 {
-RT_CALLABLE_PROGRAM BSDFSample3f Sample(MaterialParameter &mat, const float3 &normal, const float3 &wi, unsigned int &seed)
+RT_CALLABLE_PROGRAM BSDFSample3f Sample(const MaterialParameter &mat, const float3 &wi, unsigned int &seed)
 {
     BSDFSample3f bs;
     if(wi.z < 0){
@@ -62,7 +62,7 @@ RT_CALLABLE_PROGRAM BSDFSample3f Sample(MaterialParameter &mat, const float3 &no
 
 	if( rnd(seed) <= prob_specular )
 	{
-        bs = roughdielectric::SampleBase(mat, true, false, normal, wi, seed);
+        bs = roughdielectric::SampleBase(mat, true, false, wi, seed);
 
         float3 diffuseAlbedo = mat.albedo;
         float Fo = fresnel::DielectricReflectance(eta, bs.wo.z);
@@ -91,8 +91,8 @@ RT_CALLABLE_PROGRAM BSDFSample3f Sample(MaterialParameter &mat, const float3 &no
 
         float3 brdfSubstrate = bs.weight*bs.pdf;
         float  pdfSubstrate = bs.pdf*(1.0f - specularProbability);
-        float3 brdfSpecular = roughdielectric::Eval(mat, normal, wi, bs.wo);
-        float pdfSpecular  = roughdielectric::PdfBase(mat, true, false, normal, wi, bs.wo);
+        float3 brdfSpecular = roughdielectric::Eval(mat, wi, bs.wo);
+        float pdfSpecular  = roughdielectric::PdfBase(mat, true, false, wi, bs.wo);
         pdfSpecular *= specularProbability;
 
         bs.weight = (brdfSpecular + brdfSubstrate)/(pdfSpecular + pdfSubstrate);
@@ -101,12 +101,12 @@ RT_CALLABLE_PROGRAM BSDFSample3f Sample(MaterialParameter &mat, const float3 &no
     return bs;
 }
 
-RT_CALLABLE_PROGRAM float3 Eval(MaterialParameter &mat, float3 &normal, float3 &wi, float3 &wo)
+RT_CALLABLE_PROGRAM float3 Eval(const MaterialParameter &mat, const float3 &wi, const float3 &wo)
 {
     return make_float3(0.0f);
 }
 
-RT_CALLABLE_PROGRAM float Pdf(MaterialParameter &mat, float3 &normal, float3 &wi, float3 &wo){
+RT_CALLABLE_PROGRAM float Pdf(const MaterialParameter &mat, const float3 &wi, const float3 &wo){
     return 0.0f;
 }
 }

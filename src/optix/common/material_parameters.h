@@ -50,8 +50,6 @@ struct MaterialParameter
 	float ay;
 	int distribution_type;
 	int nonlinear;
-	float3 eta;
-	float3 k;
 };
 
 struct State

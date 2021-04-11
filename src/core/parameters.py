@@ -2,6 +2,8 @@ import numpy as np
 import hashlib
 from enum import IntEnum
 
+import math
+
 
 class DistributionType(IntEnum):
     beckmann = 0
@@ -32,9 +34,7 @@ class MaterialParameter:
         ('ax', np.float32),
         ('ay', np.float32),
         ('distribution_type', np.int32),
-        ('nonlinear', np.int32),
-        ('eta', np.float32, 3),
-        ('k', np.float32, 3)
+        ('nonlinear', np.int32)
     ])
 
     def __init__(self, name):
@@ -85,7 +85,7 @@ class MaterialParameter:
     def __array__(self):
         np_array = np.zeros(1, dtype=MaterialParameter.dtype)
         np_array['albedoID'] = self.diffuse_map_id
-        np_array['albedo'] = self.color if self.type =="diffuse" else self.random_color
+        np_array['albedo'] = self.color
         np_array['emission'] = self.emission
         np_array['metallic'] = self.metallic
         np_array['subsurface'] = self.subsurface
@@ -105,10 +105,13 @@ class MaterialParameter:
         np_array['intIOR'] = self.intIOR
         np_array['extIOR'] = self.extIOR
         np_array['transmission'] = self.transmission
-        np_array['distribution_type'] =int(DistributionType[self.distribution_type])
+        np_array['distribution_type'] = int(DistributionType[self.distribution_type])
         np_array['nonlinear'] = 1 if self.nonlinear else 0
-        np_array['eta'] = self.eta
-        np_array['k'] = self.k
+
+        aspect = math.sqrt(1.0 - self.anisotropic * 0.9)
+        np_array['ax'] = max(0.001, self.roughness / aspect)
+        np_array['ay'] = max(0.001, self.roughness * aspect)
+
         return np_array
 
 
@@ -128,6 +131,7 @@ class ShapeParameter:
         self.normal_buffer_id = 0
         self.n_triangles = 0
         self.face_normals = False
+
 
 class EmitterParameter:
     def __init__(self):

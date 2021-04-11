@@ -21,6 +21,7 @@
 #include "optix/common/sampling.h"
 #include "optix/common/material_parameters.h"
 #include "optix/bsdf/fresnel.h"
+#include "optix/bsdf/material_constants.h"
 #include "optix/bsdf/microfacet.h"
 #include "optix/bsdf/bsdf_sample.h"
 
@@ -28,7 +29,7 @@ using namespace optix;
 namespace roughconductor
 {
 
-RT_CALLABLE_PROGRAM BSDFSample3f Sample(MaterialParameter &mat, const float3 &normal, const float3 &wi, unsigned int &seed)
+RT_CALLABLE_PROGRAM BSDFSample3f Sample(const MaterialParameter &mat, const float3 &wi, unsigned int &seed)
 {
     BSDFSample3f bs;
     bs.pdf = 1.0;
@@ -57,7 +58,7 @@ RT_CALLABLE_PROGRAM BSDFSample3f Sample(MaterialParameter &mat, const float3 &no
     float mPdf = microfacet::pdf(dist, sampleAlpha, m);
     float pdf = mPdf * 0.25f / wiDotM;
     float weight = wiDotM * G * D / (wi.z * mPdf);
-    float3 F = fresnel::ConductorReflectance(mat.eta, mat.k, wiDotM);
+    float3 F = fresnel::ConductorReflectance(eta, k, wiDotM);
 
     bs.wo = wo;
     bs.pdf = pdf;
@@ -67,7 +68,7 @@ RT_CALLABLE_PROGRAM BSDFSample3f Sample(MaterialParameter &mat, const float3 &no
     return bs;
 }
 
-RT_CALLABLE_PROGRAM float3 Eval(MaterialParameter &mat, const float3 &normal, const float3 &wi, const float3 &wo)
+RT_CALLABLE_PROGRAM float3 Eval(const MaterialParameter &mat, const float3 &wi, const float3 &wo)
 {
     if(wi.z <= 0.0f || wo.z <= 0.0f){
         return make_float3(0.0f);
@@ -79,7 +80,7 @@ RT_CALLABLE_PROGRAM float3 Eval(MaterialParameter &mat, const float3 &normal, co
 
     float3 hr = normalize(wo + wi);
     float cosThetaM = dot(wi, hr);
-    float3 F = fresnel::ConductorReflectance(mat.eta, mat.k, cosThetaM);
+    float3 F = fresnel::ConductorReflectance(eta, k, cosThetaM);
     float G = microfacet::G(dist, alpha, wi, wo, hr);
     float D = microfacet::D(dist, alpha, hr);
     float fr = (G*D*0.25f)/wi.z;
@@ -87,7 +88,7 @@ RT_CALLABLE_PROGRAM float3 Eval(MaterialParameter &mat, const float3 &normal, co
     return mat.albedo * F * fr;
 }
 
-RT_CALLABLE_PROGRAM float Pdf(MaterialParameter &mat, float3 &normal, float3 &wo, float3 &wi)
+RT_CALLABLE_PROGRAM float Pdf(const MaterialParameter &mat, const float3 &wo, const float3 &wi)
 {
     if(wi.z <= 0.0f || wo.z <= 0.0f){
         return 0.0f;

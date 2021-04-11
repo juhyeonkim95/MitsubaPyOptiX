@@ -212,3 +212,4 @@ def LinearToSrgb(c):
     # c2 = np.power(c[0:3], kInvGamma)
     return np.power(c, kInvGamma)
 
+

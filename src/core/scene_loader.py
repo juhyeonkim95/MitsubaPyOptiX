@@ -292,82 +292,66 @@ def load_single_material(bsdf, bsdf_id=None):
         else:
             break
 
-    disneys = ["roughplastic", "plastic","roughdielectric"]
-    if bsdf_type in disneys:
-        material.type = "disney"
+    # 1. Diffuse
+    if bsdf_type == "diffuse":
+        material.color = find(bsdf, 'rgb[@name="reflectance"]', [0.5, 0.5, 0.5])
 
-    if "dielectric" in bsdf_type:
+    # 2. Dielectrics
+    elif "dielectric" in bsdf_type:
         material.is_double_sided = False
         material.intIOR = find(bsdf, 'float[@name="intIOR"]', 1.5046)
         material.extIOR = find(bsdf, 'float[@name="extIOR"]', 1.000277)
-        if bsdf_type == "dielectric":
-            material.color = np.array([1, 1, 1], dtype=np.float32)
-            material.type = "dielectric"
-            material.roughness = 0.0
-        elif bsdf_type == "roughdielectric":
-            material.roughness = float(bsdf.find('float[@name="alpha"]').attrib["value"])
-            material.color = np.array([1, 1, 1], dtype=np.float32)
-            material.distribution_type = find(bsdf, 'string[@name="distribution"]', "ggx")
-            material.type = "roughdielectric"
-        elif bsdf_type == "thindielectric":
-            material.color = np.array([1, 1, 1], dtype=np.float32)
-            material.type = "dielectric"
-            material.roughness = 0.0
-        material.transmission = 1.0
-        material.metallic = 0.0
+        material.color = np.array([1, 1, 1], dtype=np.float32)
 
+        if bsdf_type == "dielectric":
+            material.roughness = 0
+        elif bsdf_type == "roughdielectric":
+            material.roughness = find(bsdf, 'float[@name="alpha"]', 0.1)
+            material.distribution_type = find(bsdf, 'string[@name="distribution"]', "ggx")
+        elif bsdf_type == "thindielectric":
+            material.roughness = 0.0
+
+    # 3. Conductors
+    elif "conductor" in bsdf_type:
+        material.metallic = 1.0
+        material.eta = find(bsdf, 'rgb[@name="eta"]', [0, 0, 0])
+        material.k = find(bsdf, 'rgb[@name="k"]', [1, 1, 1])
+        material.color = np.array([1, 1, 1], dtype=np.float32)
+        # material.color = find(bsdf, 'rgb[@name="specularReflectance"]', [1, 1, 1])
+
+        if bsdf_type == "conductor":
+            material.roughness = 0.0
+        elif bsdf_type == "roughconductor":
+            material.roughness = find(bsdf, 'float[@name="alpha"]', 0.5)
+            material.distribution_type = find(bsdf, 'string[@name="distribution"]', "ggx")
+
+    # 4. plastics
     elif "plastic" in bsdf_type:
         material.intIOR = find(bsdf, 'float[@name="intIOR"]', 1.5046)
         material.extIOR = find(bsdf, 'float[@name="extIOR"]', 1.000277)
         material.clearcoat = 1.0
-        if bsdf_type == "roughplastic":
-            material.roughness = float(bsdf.find('float[@name="alpha"]').attrib["value"])
-            material.distribution_type = find(bsdf, 'string[@name="distribution"]', "ggx")
-            #material.type = "roughplastic"
-            material.color = find(bsdf, 'rgb[@name="diffuseReflectance"]', [0.5, 0.5, 0.5])
-        elif bsdf_type == "plastic":
-            material.roughness = 0
-            material.color = find(bsdf, 'rgb[@name="diffuseReflectance"]', [0.5, 0.5, 0.5])
-            #material.type = "plastic"
+        material.color = find(bsdf, 'rgb[@name="diffuseReflectance"]', [0.5, 0.5, 0.5])
         material.nonlinear = find(bsdf, 'boolean[@name="nonlinear"]', False)
 
-    elif bsdf_type == "conductor":
-        material.metallic = 1.0
-        material.roughness = 0.0
-        material.eta = find(bsdf, 'rgb[@name="eta"]', [0, 0, 0])
-        material.k = find(bsdf, 'rgb[@name="k"]', [1, 1, 1])
-        material.color = np.array([1, 1, 1], dtype=np.float32)
-        material.type = "conductor"
-    elif bsdf_type == "roughconductor":
-        material.metallic = 1.0
-        material.roughness = find(bsdf, 'float[@name="alpha"]', 0.5)
-        material.eta = find(bsdf, 'rgb[@name="eta"]', [0, 0, 0])
-        material.k = find(bsdf, 'rgb[@name="k"]', [1, 1, 1])
-        material.type = "roughconductor"
-        material.color = np.array([1, 1, 1], dtype=np.float32)
-        material.distribution_type = find(bsdf, 'string[@name="distribution"]', "ggx")
+        if bsdf_type == "plastic":
+            material.roughness = 0
+        elif bsdf_type == "roughplastic":
+            material.roughness = find(bsdf, 'float[@name="alpha"]', 0.1)
+            material.distribution_type = find(bsdf, 'string[@name="distribution"]', "ggx")
 
-        #material.color = np.array([0.200438, 0.924033, 1.10221], dtype=np.float32)
+    else:
+        print("Not implemented Type", bsdf_type)
 
-        # material.metallic = 1.0
-        # material.roughness = float(bsdf.find('float[@name="alpha"]').attrib["value"])
-        # spectrum = bsdf.find('spectrum[@name="specularReflectance"]')
-        # rgb = bsdf.find('rgb[@name="specularReflectance"]')
-        # material.color = str2floatarray(spectrum.attrib["value"] if spectrum is not None else rgb.attrib["value"])
-    elif bsdf_type == "diffuse":
-        spectrum = bsdf.find("spectrum")
-        rgb = bsdf.find("rgb")
-        if spectrum is not None:
-            diffuse_color = str2floatarray(spectrum.attrib["value"])
-            if diffuse_color.shape[0] == 1:
-                diffuse_color = np.tile(diffuse_color, 3)
-            material.color = diffuse_color
-        elif rgb is not None:
-            diffuse_color = str2floatarray(rgb.attrib["value"])
-            if diffuse_color.shape[0] == 1:
-                diffuse_color = np.tile(diffuse_color, 3)
-            material.color = diffuse_color
+    # Not implemented
+    if bsdf_type == "thindielectric":
+        bsdf_type = "dielectric"
+    elif bsdf_type == "plastic":
+        bsdf_type = "plastic"#"disney"
+    elif bsdf_type == "roughplastic":
+        bsdf_type = "diffuse" #"disney"
+    material.type = bsdf_type
 
+    # load texture
     texture = bsdf.find('texture')
     if texture is not None:
         texture_type = texture.attrib["type"]
@@ -375,7 +359,6 @@ def load_single_material(bsdf, bsdf_id=None):
             diffuse_map = texture.find('string[@name="filename"]').attrib["value"]
             material.diffuse_map = diffuse_map
         elif texture_type == "checkerboard":
-            print("Checker board!")
             color0 = str2floatarray(texture.find('rgb[@name="color0"]').attrib["value"])
             color1 = str2floatarray(texture.find('rgb[@name="color1"]').attrib["value"])
             uoffset = float(texture.find('float[@name="uoffset"]').attrib["value"])
@@ -390,5 +373,5 @@ def load_single_material(bsdf, bsdf_id=None):
             material.color1 = color1
             material.to_uv = UV_mat
         else:
-            print("Other type")
+            print("Other texture type", texture_type)
     return material

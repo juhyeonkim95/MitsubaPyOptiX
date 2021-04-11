@@ -27,7 +27,7 @@ using namespace optix;
 namespace lambert
 {
 
-RT_CALLABLE_PROGRAM BSDFSample3f Sample(MaterialParameter &mat, const float3 &normal, const float3 &wi, unsigned int &seed)
+RT_CALLABLE_PROGRAM BSDFSample3f Sample(const MaterialParameter &mat, const float3 &wi, unsigned int &seed)
 {
     BSDFSample3f bs;
     if(wi.z < 0){
@@ -42,14 +42,14 @@ RT_CALLABLE_PROGRAM BSDFSample3f Sample(MaterialParameter &mat, const float3 &no
 	return bs;
 }
 
-RT_CALLABLE_PROGRAM float3 Eval(MaterialParameter &mat, const float3 &normal, const float3 &wi, const float3 &wo)
+RT_CALLABLE_PROGRAM float3 Eval(const MaterialParameter &mat, const float3 &wi, const float3 &wo)
 {
     if(wi.z <= 0.0f || wo.z <= 0.0f)
         return make_float3(0.0f);
     return mat.albedo * M_1_PIf * wo.z;
 }
 
-RT_CALLABLE_PROGRAM float Pdf(MaterialParameter &mat, const float3 &normal, const float3 &wi, const float3 &wo)
+RT_CALLABLE_PROGRAM float Pdf(const MaterialParameter &mat, const float3 &wi, const float3 &wo)
 {
     if(wi.z <= 0.0f || wo.z <= 0.0f)
         return 0.0f;

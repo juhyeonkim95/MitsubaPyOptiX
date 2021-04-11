@@ -31,10 +31,14 @@
 //#include "helpers.h"
 //#include "prd_struct.h"
 #include "optix/q_table/qTable.cuh"
+//#include "optix/q_table/sdTree.cuh"
+
 #include "optix/common/helpers.h"
 #include "optix/light/direct_light.h"
 #include "optix/common/rt_function.h"
 #include "optix/cameras/camera.h"
+#define MAX_NUM_VERTICES 32
+
 
 using namespace optix;
 
@@ -72,6 +76,7 @@ rtDeclareVariable(unsigned int,  accumulative_q_table_update , , );
 
 rtBuffer<float4, 2>              output_buffer;
 rtBuffer<float4, 2>              output_buffer2;
+
 rtBuffer<float, 2>               hit_count_buffer;
 rtBuffer<float, 2>               path_length_buffer;
 rtBuffer<float2, 2>               scatter_type_buffer;
@@ -80,6 +85,10 @@ rtDeclareVariable(unsigned int,  scatter_sample_type, , );
 rtDeclareVariable(unsigned int,  need_q_table_update, , );
 rtDeclareVariable(unsigned int,     use_mis, , );
 rtDeclareVariable(unsigned int,     use_soft_q_update, , );
+rtDeclareVariable(unsigned int,     construct_stree, , );
+
+
+rtBuffer<float3, 3>              point_buffer;
 
 
 RT_CALLABLE_PROGRAM bool volumeScatter(float3 ray_origin, float3 ray_direction, PerRayData_pathtrace &prd)
@@ -166,23 +175,28 @@ RT_FUNCTION void integrator(PerRayData_pathtrace& prd, float3& radiance)
     prd.brdf_scatter_count = 0;
     prd.q_scatter_count = 0;
 
+    float3 ray_origins[MAX_NUM_VERTICES];
+    float3 ray_directions[MAX_NUM_VERTICES];
+    float3 radiances[MAX_NUM_VERTICES];
+    float3 current_attenuations[MAX_NUM_VERTICES];
+
     for(;;)
     {
         prd.current_attenuation = make_float3(1.0f);
         prd.volume_scattered = false;
         prd.radiance = make_float3(0.0f);
 
-        Ray ray = make_Ray(ray_origin, ray_direction, 0, scene_epsilon, RT_DEFAULT_MAX);
+        Ray ray = make_Ray(ray_origin, ray_direction, pathtrace_ray_type, scene_epsilon, RT_DEFAULT_MAX);
         rtTrace(top_object, ray, prd);
         bool scattered = false;
         if(!prd.isMissed){
             scattered = volumeScatter(ray_origin, ray_direction, prd);
         }
-        if(need_q_table_update){
+        if(need_q_table_update && q_table_update_method != 3){
             float reward = fmaxf(prd.radiance);
             float target_q_value;
             if(prd.done){
-                target_q_value = reward * 0.1f;
+                target_q_value = reward;
             }else{
                 float3 wo = -ray_direction;
                 float3 wi = prd.direction;
@@ -204,8 +218,23 @@ RT_FUNCTION void integrator(PerRayData_pathtrace& prd, float3& radiance)
                 }
             }
         }
+        if(need_q_table_update && !prd.isMissed){
+            accumulateNormalValue(prd.origin, prd.normal);
+        }
+        // record radiance
+        if(q_table_update_method == 3){
+            radiances[prd.depth] = prd.radiance;
+            ray_origins[prd.depth] = ray_origin;
+            ray_directions[prd.depth] = ray_direction;
+            current_attenuations[prd.depth] = prd.current_attenuation;
+        }
 
         prd.depth++;
+
+        // record to stree
+        if(construct_stree && !prd.isMissed){
+            point_buffer[launch_index] = prd.origin;
+        }
 
         if(!scattered){
             prd.result += prd.radiance * prd.attenuation;
@@ -233,14 +262,29 @@ RT_FUNCTION void integrator(PerRayData_pathtrace& prd, float3& radiance)
             prd.attenuation /= pcont;
         }
 
-
-
         // Update ray data for the next path segment
         ray_origin = prd.origin;
         ray_direction = prd.direction;
         normal = prd.normal;
     }
+
+
+    // update q table in monte-carlo way.
+    if(q_table_update_method == 3){
+        float3 accumulated_radiance = radiances[prd.depth - 1];
+        for(int i=prd.depth - 1; i>=1; i--){
+            float x = accumulated_radiance.x;
+            float y = accumulated_radiance.y;
+            float z = accumulated_radiance.z;
+            float q = (x + y + z) / 3;
+            accumulateQValue(ray_origins[i], ray_directions[i], q);
+            accumulated_radiance = radiances[i - 1] + current_attenuations[i - 1] * accumulated_radiance;
+        }
+        prd.result = accumulated_radiance;
+    }
+
 }
+
 
 RT_PROGRAM void pathtrace_camera()
 {
@@ -300,7 +344,6 @@ RT_PROGRAM void pathtrace_camera()
         atomicAdd(&path_length_buffer[screen_index], float(prd.depth));
         atomicAdd(&scatter_type_buffer[screen_index].x, prd.brdf_scatter_count);
         atomicAdd(&scatter_type_buffer[screen_index].y, prd.q_scatter_count);
-
     } while (--left_samples_pass);
 
     //prd.origin = ray_origin;
