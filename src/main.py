@@ -570,7 +570,7 @@ if __name__ == '__main__':
     #test_multiple_and_export_result(all_scenes, 4, "../result_0414_compare_epsilon_opt/scale_4_time_10", test_time=True, _time=10)
     #test_multiple_and_export_result(all_scenes, 2, "../result_0414_compare_epsilon_opt/scale_2_time_40", test_time=True, _time=40)
     #test_multiple_and_export_result(all_scenes, 2, "../result_0414_compare_epsilon_opt/scale_2_time_20", test_time=True, _time=20)
-    #test_multiple_and_export_result(all_scenes, 2, "../result_0414_compare_epsilon_opt/scale_2_time_40", test_time=True, _time=40)
+    test_multiple_and_export_result(all_scenes, 2, "../result_0414_2_compare_epsilons/scale_2_time_40", test_time=True, _time=40)
 
     #test_multiple_and_export_result(all_scenes, 4, "../result_rejection_quad_tree_test/scale_4_time_10", test_time=True, _time=10)
 
@@ -584,7 +584,7 @@ if __name__ == '__main__':
 
     # test("cornell-box", 4, test_time=True, show_picture=True, show_result=True, time=5)
     #update_total_result("../result_0412_2/scale_2_time_40", test_time=True)
-    export_radiance("cornell-box", 4, n_uvs=[8, 16, 32], render_reference=False, export=True)
+    #export_radiance("cornell-box", 4, n_uvs=[8, 16, 32], render_reference=False, export=True)
 
 # total_dict["q_brdf_sarsa"] = {'sample_type': SAMPLE_Q_COS_PROPORTION, 'q_table_update_method': Q_UPDATE_SARSA}
 # total_dict["q_brdf_rej"] = {'sample_type': SAMPLE_Q_COS_REJECT}
