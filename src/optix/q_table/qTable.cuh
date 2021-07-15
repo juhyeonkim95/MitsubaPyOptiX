@@ -4,6 +4,7 @@
 #include "optix/common/random.h"
 #include "optix/common/sampling.h"
 #include "optix/q_table/data_structure.cuh"
+#include "optix/common/rt_function.h"
 // #include "optix/bsdf/bsdf.h"
 
 
@@ -17,6 +18,8 @@ rtBuffer<float, 2>              q_table_accumulated;
 rtBuffer<float, 2>              q_table_pdf;
 rtBuffer<uint, 2>               q_table_visit_counts;
 rtBuffer<uint, 2>               q_table_normal_counts;
+rtBuffer<unsigned int>              invalid_sample_counts;
+rtBuffer<unsigned int>              valid_sample_counts;
 
 rtBuffer<float2, 2>              mcmc_table;
 
@@ -28,7 +31,7 @@ rtBuffer<float3, 1>             unitUVVectors;
 rtDeclareVariable(unsigned int,     q_table_update_method, , );
 rtDeclareVariable(unsigned int,     q_value_sample_method, , );
 rtDeclareVariable(unsigned int,     save_q_cos, , );
-
+rtDeclareVariable(unsigned int,     use_memoization, ,);
 
 rtDeclareVariable(float,     q_value_sample_constant, , );
 
@@ -87,6 +90,18 @@ static __host__ __device__ void accumulateNormalValue(float3 position, float3 no
     atomicAdd(&q_table_normal_counts[idx], 1);
 }
 
+static __host__ __device__ void increment_invalid_sample(float3 &position)
+{
+    uint positionIndex = positionToIndex(position);
+    atomicAdd(&invalid_sample_counts[positionIndex], 1);
+}
+
+static __host__ __device__ void increment_valid_sample(float3 &position)
+{
+    uint positionIndex = positionToIndex(position);
+    atomicAdd(&valid_sample_counts[positionIndex], 1);
+}
+
 static __host__ __device__ void accumulateQValue(float3 position, float3 direction, float value)
 {
     uint positionIndex = positionToIndex(position);
@@ -95,6 +110,8 @@ static __host__ __device__ void accumulateQValue(float3 position, float3 directi
     atomicAdd(&q_table_accumulated[idx], value);
     atomicAdd(&q_table_visit_counts[idx], 1);
 }
+
+
 
 static __host__ __device__ uint updateVisit(float3 position, float3 direction)
 {
@@ -223,11 +240,11 @@ static __host__ __device__ Sample_info sampleScatteringDirectionProportionalToQR
     optix::Onb onb( normal );
     float q_value_sum = 0;
     float max_val = 0;
-    if(irradiance_table[make_uint2(n_i, positionIndex)] > 0.0){
+
+    if(use_memoization && irradiance_table[make_uint2(n_i, positionIndex)] > 0.0){
         q_value_sum = irradiance_table[make_uint2(n_i, positionIndex)];
         max_val = max_radiance_table[make_uint2(n_i, positionIndex)];
     } else {
-
         for(unsigned int i=0; i<UVN * 2; i++){
             float3 v_i = unitUVVectors[i];//getDirectionFrom(i, make_float2(0.5, 0.5));
             float cos_theta = dot(normal, v_i);
@@ -240,8 +257,10 @@ static __host__ __device__ Sample_info sampleScatteringDirectionProportionalToQR
                 q_value_sum += q_cos;
             }
         }
-        irradiance_table[make_uint2(n_i, positionIndex)] = q_value_sum;
-        max_radiance_table[make_uint2(n_i, positionIndex)] = max_val;
+        if (use_memoization){
+            irradiance_table[make_uint2(n_i, positionIndex)] = q_value_sum;
+            max_radiance_table[make_uint2(n_i, positionIndex)] = max_val;
+        }
     }
 
     Sample_info sample_info;
@@ -255,6 +274,68 @@ static __host__ __device__ Sample_info sampleScatteringDirectionProportionalToQR
         float e = rnd(seed);
         uint uv = directionToIndex(positionIndex, direction);
         pdf = getPolicyQValue(positionIndex, uv) * max(0.0, dot(normal, direction));
+        if(e < pdf / max_val){
+            break;
+        }
+    }
+
+    pdf /= q_value_sum;
+    pdf *= float(UVN);
+    pdf *= 1/(2*M_PIf);
+
+    sample_info.direction = direction;
+    sample_info.pdf = pdf;
+    return sample_info;
+}
+
+static __host__ __device__ Sample_info sampleScatteringDirectionProportionalToQReject2(float3 position, float3 normal, unsigned int &seed)
+{
+    uint UVN = unitUVNumber.x * unitUVNumber.y;
+    uint positionIndex = positionToIndex(position);
+    uint n_i = directionToIndex(positionIndex, normal);
+    optix::Onb onb( normal );
+    float q_value_sum = 0;
+    float max_val = 0;
+    if(use_memoization && irradiance_table[make_uint2(n_i, positionIndex)] > 0.0){
+        q_value_sum = irradiance_table[make_uint2(n_i, positionIndex)];
+        max_val = max_radiance_table[make_uint2(n_i, positionIndex)];
+    } else {
+        for(unsigned int i=0; i<UVN * 2; i++){
+            float3 v_i = unitUVVectors[i];//getDirectionFrom(i, make_float2(0.5, 0.5));
+            float cos_theta = dot(normal, v_i);
+            if(cos_theta > 0.0f){
+                float c = cos_theta;//considerCosineTerm?cos_theta:1.0;
+                float q_cos = getPolicyQValue(positionIndex, i) * c;
+                if(q_cos > max_val){
+                    max_val = q_cos;
+                }
+                q_value_sum += q_cos;
+            }
+        }
+        if (use_memoization){
+            irradiance_table[make_uint2(n_i, positionIndex)] = q_value_sum;
+            max_radiance_table[make_uint2(n_i, positionIndex)] = max_val;
+        }
+    }
+
+    Sample_info sample_info;
+    float3 direction;
+    float pdf;
+
+    float uniform = q_value_sum / float(UVN);
+    float c = uniform / max_val;
+    float epsilon = c < 0.5 ? (1 - 2 * c) / (2 - 2 * c) : 0;
+    max_val = (1-epsilon) * max_val + epsilon * uniform;
+
+    while(true){
+        float2 x = make_float2(rnd(seed), rnd(seed));
+        direction = UniformSampleHemisphere(x.x, x.y);
+        onb.inverse_transform(direction);
+        float e = rnd(seed);
+        uint uv = directionToIndex(positionIndex, direction);
+        pdf = getPolicyQValue(positionIndex, uv) * max(0.0, dot(normal, direction));
+        pdf = (1-epsilon) * pdf + epsilon * uniform;
+
         if(e < pdf / max_val){
             break;
         }
@@ -327,48 +408,115 @@ static __host__ __device__ Sample_info sampleScatteringDirectionProportionalToQ(
 static __host__ __device__ Sample_info sampleScatteringDirectionProportionalToQQuadTree(
     const float3 &position, const float3 &normal, unsigned int &seed)
 {
-    uint pos_index = positionToIndex(position);
-    uint2 pos_dir_idx = make_uint2(0, pos_index);
-    float2 p = make_float2(0);
-    float size = 1;
     float pdf = 1;
-
+    float bias = 0.0;
+    float3 direction;
     while(true){
-        // Leaf node
-        if(dtree_index_array[pos_dir_idx] == 0){
-            p += make_float2(rnd(seed), rnd(seed)) * size;
-            break;
-        }
-
-        float sum = q_table[pos_dir_idx];
-        float accumulated_value = 0;
-        float random_value = rnd(seed) * sum;
-
-        for(int i=0; i<4; i++){
-            uint child_idx = 4 * dtree_rank_array[pos_dir_idx] + i + 1;
-            float q_value = q_table[make_uint2(child_idx, pos_index)];
-            accumulated_value += q_value;
-            if(random_value < accumulated_value){
-                p.x += (i % 2 == 1) ? size * 0.5 : 0;
-                p.y += (i >= 2) ? size * 0.5 : 0;
-                pos_dir_idx.y = child_idx;
-                pdf *= (q_value / sum);
+        uint pos_index = positionToIndex(position);
+        uint2 pos_dir_idx = make_uint2(0, pos_index);
+        float2 p = make_float2(0);
+        float size = 1;
+        pdf = 1;
+        while(true){
+            float sum = (q_table[pos_dir_idx] + bias) * 4;
+            // sum = 0.0;
+            // Leaf node
+            if(sum <= 0.0 || dtree_index_array[pos_dir_idx] == 0){
+                p += make_float2(rnd(seed), rnd(seed)) * size;
                 break;
             }
+
+            float accumulated_value = 0;
+            float random_value = rnd(seed) * sum;
+
+            for(int i=0; i<4; i++){
+                uint child_idx = 4 * dtree_rank_array[pos_dir_idx] + i + 1;
+                float q_value = q_table[make_uint2(child_idx, pos_index)] + bias;
+                accumulated_value += q_value;
+                if(random_value <= accumulated_value){
+                    p.x += (i % 2 == 1) ? size * 0.5 : 0;
+                    p.y += (i >= 2) ? size * 0.5 : 0;
+                    pos_dir_idx.x = child_idx;
+                    pdf *= (4 * q_value / sum);
+                    break;
+                }
+            }
+            size *= 0.5f;
         }
-        size *= 0.5f;
+        direction = mapCanonicalToDirection(p);
+        //if(dot(direction, normal) >= 0){
+        break;
+        //}
     }
+
+    // pdf = max(pdf, 0.01f);
     pdf *= 1 / (4 * M_PIf);
     Sample_info sample_info;
     sample_info.pdf = pdf;
-    sample_info.direction = mapCanonicalToDirection(p);
+    sample_info.direction = direction;//mapCanonicalToDirection(p);
     //sample_info.pdf = 1 / (4 * M_PIf);
     //sample_info.direction = UniformSampleSphere(rnd(seed), rnd(seed));
+    //sample_info.pdf = 1 / (2 * M_PIf);
+    //sample_info.direction = UniformSampleHemisphere(rnd(seed), rnd(seed));
+
     //cosine_sample_hemisphere(rnd(seed), rnd(seed), sample_info.direction);
     //sample_info.pdf = sample_info.direction.z / M_PIf;
     //optix::Onb onb( normal );
     //onb.inverse_transform(sample_info.direction);
     return sample_info;
+}
+
+static __host__ __device__ float getPdfQuadTree(
+    const float3 &position, const float3 &direction)
+{
+    float2 p = mapDirectionToCanonical(direction);
+    uint child = 0;
+
+    float pdf = 1;
+    uint pos_index = positionToIndex(position);
+    uint2 pos_dir_idx = make_uint2(0, pos_index);
+
+    pdf = 1;
+
+    while(true){
+        float sum = q_table[pos_dir_idx] * 4;
+
+        if(sum <= 0.0 || dtree_index_array[pos_dir_idx] == 0){
+            break;
+        }
+
+        // Go to child node
+        bool x = p.x > 0.5;
+        bool y = p.y > 0.5;
+        uint child_idx = (y << 1) | x;
+        p.x = x ? 2 * p.x - 1 : 2 * p.x;
+        p.y = y ? 2 * p.y - 1 : 2 * p.y;
+        child = 4 * dtree_rank_array[pos_dir_idx] + child_idx + 1;
+        float q_value = q_table[make_uint2(child, pos_index)];
+        pdf *= (4 * q_value / sum);
+
+        pos_dir_idx.x = child;
+    }
+    pdf *= 1 / (4 * M_PIf);
+    return pdf;
+}
+
+static __host__ __device__ float getPdfGrid(
+    const float3 &position, const float3 &direction)
+{
+    uint positionIndex = positionToIndex(position);
+    uint directionIndex = directionToIndex(positionIndex, direction);
+    float pdf;
+    if (directionIndex == 0){
+        pdf = getQCDF(positionIndex, 0);
+    } else {
+        pdf = getQCDF(positionIndex, directionIndex) - getQCDF(positionIndex, directionIndex - 1);
+    }
+
+    uint UVN = unitUVNumber.x * unitUVNumber.y;
+    pdf *= float(2 * UVN);
+    pdf *= 1/(4 * M_PIf);
+    return pdf;
 }
 
 static __host__ __device__ Sample_info sampleScatteringDirectionProportionalToQSphere(float3 position, unsigned int &seed)
@@ -607,20 +755,27 @@ static __host__ __device__ Sample_info sampleScatteringDirectionProportionalToQV
     return sample_info;
 }
 
-static __host__ __device__ float getNextQValue(float3 &position, float3 &normal, float3 &wo, float3 &wi)
+static __host__ __device__ float getNextQValue(float3 &position, float3 &normal, float3 &wo, float3 &wi, float pdf)
 {
+    if(pdf <= 1e-5){
+        return 0.0;
+    }
     float new_value;
     // Expected SARSA
     if(q_table_update_method == 0){
         new_value = getExpectedQValue(position, normal, wo);
     }
     // Q-learning
-    else if(q_table_update_method == 1){
-        new_value = getMaximumQValue(position, normal, wo);
-    }
+//    else if(q_table_update_method == 1){
+//        new_value = getMaximumQValue(position, normal, wo);
+//    }
     // SARSA
+    else if(q_table_update_method == 1){
+        new_value = getQValue(position, wi) * max(0.0f, dot(wi, normal)) / (pdf * M_PIf);
+    }
+    // SARSA2
     else if(q_table_update_method == 2){
-        new_value = getQValue(position, wi) * 2 * max(0.0f, dot(wi, normal));
+        new_value = getQValue(position, wi) * max(0.0f, dot(wi, normal)) * 2;
     }
     return new_value;
 }

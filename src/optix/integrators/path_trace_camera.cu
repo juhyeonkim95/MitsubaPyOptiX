@@ -172,8 +172,8 @@ RT_FUNCTION void integrator(PerRayData_pathtrace& prd, float3& radiance)
     float3 ray_direction = prd.direction;
     float3 normal = make_float3(0,1,0);
 
-    prd.brdf_scatter_count = 0;
-    prd.q_scatter_count = 0;
+    prd.valid_scatter_count = 0;
+    prd.invalid_scatter_count = 0;
 
     float3 ray_origins[MAX_NUM_VERTICES];
     float3 ray_directions[MAX_NUM_VERTICES];
@@ -202,7 +202,7 @@ RT_FUNCTION void integrator(PerRayData_pathtrace& prd, float3& radiance)
                 float3 wi = prd.direction;
 
                 float f_s = (prd.diffuse_color.x + prd.diffuse_color.y + prd.diffuse_color.z) / 3.0f;
-                target_q_value = getNextQValue(prd.origin, prd.normal, wo, wi) * f_s;
+                target_q_value = getNextQValue(prd.origin, prd.normal, wo, wi, prd.scatterPdf) * f_s;
             }
 
             if(prd.depth > 0){
@@ -211,6 +211,7 @@ RT_FUNCTION void integrator(PerRayData_pathtrace& prd, float3& radiance)
                     float alpha = 0.01f;
                     float update_value = (1-alpha) * getQValue(ray_origin, ray_direction) + alpha * target_q_value;
                     setQValue(ray_origin, ray_direction, update_value);
+
 //                    if(use_soft_q_update)
 //                        setQValueSoft(ray_origin, prd.origin, target_q_value);
                 } else if(accumulative_q_table_update == 1){
@@ -221,6 +222,16 @@ RT_FUNCTION void integrator(PerRayData_pathtrace& prd, float3& radiance)
         if(need_q_table_update && !prd.isMissed){
             accumulateNormalValue(prd.origin, prd.normal);
         }
+
+        if(!prd.isMissed){
+            incrementPositionInSTree(prd.origin);
+        }
+
+//        // invalid sample
+//        if(!prd.isMissed && dot(prd.normal, prd.direction) <= 0){
+//            incrementPositionInSTree(prd.origin);
+//        }
+
         // record radiance
         if(q_table_update_method == 3){
             radiances[prd.depth] = prd.radiance;
@@ -229,12 +240,13 @@ RT_FUNCTION void integrator(PerRayData_pathtrace& prd, float3& radiance)
             current_attenuations[prd.depth] = prd.current_attenuation;
         }
 
-        prd.depth++;
-
         // record to stree
         if(construct_stree && !prd.isMissed){
-            point_buffer[launch_index] = prd.origin;
+            uint3 stree_index = make_uint3(launch_index.x, launch_index.y, prd.depth);
+            point_buffer[stree_index] = prd.origin;
         }
+
+        prd.depth++;
 
         if(!scattered){
             prd.result += prd.radiance * prd.attenuation;
@@ -269,7 +281,7 @@ RT_FUNCTION void integrator(PerRayData_pathtrace& prd, float3& radiance)
     }
 
 
-    // update q table in monte-carlo way.
+    // update q table in monte-carlo way.`
     if(q_table_update_method == 3){
         float3 accumulated_radiance = radiances[prd.depth - 1];
         for(int i=prd.depth - 1; i>=1; i--){
@@ -342,8 +354,8 @@ RT_PROGRAM void pathtrace_camera()
 
         atomicAdd(&hit_count_buffer[screen_index], hit_count);
         atomicAdd(&path_length_buffer[screen_index], float(prd.depth));
-        atomicAdd(&scatter_type_buffer[screen_index].x, prd.brdf_scatter_count);
-        atomicAdd(&scatter_type_buffer[screen_index].y, prd.q_scatter_count);
+        atomicAdd(&scatter_type_buffer[screen_index].x, prd.valid_scatter_count);
+        atomicAdd(&scatter_type_buffer[screen_index].y, prd.invalid_scatter_count);
     } while (--left_samples_pass);
 
     //prd.origin = ray_origin;

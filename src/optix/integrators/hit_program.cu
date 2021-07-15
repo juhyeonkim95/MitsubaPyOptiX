@@ -31,11 +31,13 @@
 //#include "random.h"
 //#include "helpers.h"
 //#include "prd_struct.h"
-#include "optix/q_table/qTable.cuh"
+#include "optix/q_table/radiance_record.cuh"
+//#include "optix/q_table/qTable.cuh"
 #include "optix/light/direct_light.h"
 #include "optix/bsdf/bsdf.h"
 #include "optix/bsdf/disney.h"
 #include "optix/app_config.h"
+
 
 
 using namespace optix;
@@ -72,6 +74,7 @@ rtDeclareVariable(PerRayData_pathtrace, prd, rtPayload, );
 rtDeclareVariable(unsigned int,     use_mis, , );
 rtDeclareVariable(unsigned int,     sample_type, , );
 rtDeclareVariable(unsigned int,     is_first_pass, , );
+rtDeclareVariable(float,     bsdf_sampling_fraction, , );
 
 rtDeclareVariable(int, materialId, , );
 rtBuffer<MaterialParameter> sysMaterialParameters;
@@ -135,53 +138,98 @@ RT_PROGRAM void closest_hit()
     state.eta = dot(state.normal, -ray.direction) > 0.0 ? (1.0 / ior) : ior;
 
     float3 new_direction;
-    float pdf;
-    float3 weight;
+    float pdf = 0;
+    float3 weight = make_float3(0.0f);
     BSDFSample3f bs;
 
     bool q_sample_implemented_type = (programId == 0);
-    bool need_brdf_sampling = is_first_pass || (sample_type == 1) || !q_sample_implemented_type;
+    bool need_brdf_sampling = is_first_pass || (sample_type == SAMPLE_BSDF) || !q_sample_implemented_type;
     bool need_uniform_sampling = (sample_type == 0 && programId == 0);
 
-    need_brdf_sampling |= (sample_type == 6 && rnd(prd.seed) < 0.5);
-    need_brdf_sampling |= (sample_type == 7);
+    // need_brdf_sampling |= (rnd(prd.seed) < bsdf_sampling_fraction);
+    // need_brdf_sampling |= (sample_type == 7);
+    bool is_material_specular = (programId == 1) | (programId == 3);
 
+    // 0. uniform sampling
     if(need_uniform_sampling){
         new_direction = UniformSampleHemisphere(rnd(prd.seed), rnd(prd.seed));
         pdf = 1 / (2 * M_PIf);
+        //new_direction = UniformSampleSphere(rnd(prd.seed), rnd(prd.seed));
+        //pdf = 1 / (4 * M_PIf);
 
-        float3 f = Eval(mat, wi_local, new_direction);
+        float3 f = bsdf::Eval(mat, wi_local, new_direction);
         weight = make_float3(abs(f.x), abs(f.y), abs(f.z)) / pdf;
         onb.inverse_transform(new_direction);
-    } else if(need_brdf_sampling){
-        if(programId == 99){
-            Sample_info sample_info;
-            weight = disney::DisneySample(state, wi, ffnormal, prd.seed, sample_info.direction, sample_info.pdf);
-            new_direction = sample_info.direction;
-            pdf = sample_info.pdf;
-            weight = weight * abs(dot(ffnormal, sample_info.direction)) / pdf;
-            prd.brdf_scatter_count += 1;
-        } else {
-            bs = Sample(mat, wi_local, prd.seed);
+    }
+    // 1. BSDF sampling (prop to f * cos)
+    else if(need_brdf_sampling){
+        bs = bsdf::Sample(mat, wi_local, prd.seed);
+        onb.inverse_transform(bs.wo);
+        new_direction = bs.wo;
+        weight = bs.weight;
+        pdf = bs.pdf;
+        // prd.brdf_scatter_count += 1;
+    }
+    // 2. BSDF & Q sampling (prop to f * cos and Q)
+    else if((sample_type == SAMPLE_QUADTREE)|| (sample_type == SAMPLE_SPHERICAL_INV)){
+        // Use Multiple Importance Sampling
+        float bsdf_pdf;
+        float radiance_pdf;
+
+        // (1) BSDF Sampling (prop to f * cos)
+        if (rnd(prd.seed) < bsdf_sampling_fraction){
+            bs = bsdf::Sample(mat, wi_local, prd.seed);
             onb.inverse_transform(bs.wo);
             new_direction = bs.wo;
             weight = bs.weight;
-            pdf = bs.pdf;
-            prd.brdf_scatter_count += 1;
+            bsdf_pdf = bs.pdf;
+            // prd.brdf_scatter_count += 1;
+
+            weight *= bsdf_pdf;
+            radiance_pdf = radiance_record::Pdf(prd.origin, normal, new_direction, sample_type);
         }
+
+        // (2) Radiance Sampling (prop to Q)
+        else {
+            Sample_info sample_info = radiance_record::Sample(prd.origin, normal, prd.seed, sample_type);
+            // Sample_info sample_info = sampleScatteringDirectionProportionalToQQuadTree(prd.origin, normal, prd.seed);
+            new_direction = sample_info.direction;
+            radiance_pdf = sample_info.pdf;
+            float3 wo_local = to_local(onb, new_direction);
+            weight = bsdf::Eval(mat, wi_local, wo_local);
+
+            bsdf_pdf = bsdf::Pdf(mat, wi_local, wo_local);
+        }
+
+        // invalid sample
+        if(dot(weight, weight) == 0.0){
+            increment_invalid_sample(prd.origin);
+            if(prd.depth == 0)
+                prd.invalid_scatter_count = 1;
+        } else {
+            increment_valid_sample(prd.origin);
+            if(prd.depth == 0)
+                prd.valid_scatter_count = 1;
+        }
+
+        // Apply MIS
+        pdf = bsdf_sampling_fraction * bsdf_pdf + (1 - bsdf_sampling_fraction) * radiance_pdf;
+        weight = weight / pdf;
     }
     else {
         Sample_info sample_info;
 
         if (sample_type == 2 || sample_type == 3){
             sample_info = sampleScatteringDirectionProportionalToQ(prd.origin, normal, sample_type == 3, prd.seed);
-            prd.q_scatter_count += 1;
+            // prd.q_scatter_count += 1;
         }
         else if(sample_type == 4){
             sample_info = sampleScatteringDirectionProportionalToQMCMC(prd.origin, normal, prd.seed);
         }
         else if(sample_type == 5){
             sample_info = sampleScatteringDirectionProportionalToQReject(prd.origin, normal, prd.seed);
+        }else if(sample_type == 8){
+            sample_info = sampleScatteringDirectionProportionalToQReject2(prd.origin, normal, prd.seed);
         }
         else if(sample_type == 6){
             sample_info = sampleScatteringDirectionProportionalToQSphere(prd.origin, prd.seed);
@@ -192,11 +240,22 @@ RT_PROGRAM void closest_hit()
 
         new_direction = sample_info.direction;
         pdf = sample_info.pdf;
+        if(pdf > 0 && dot(new_direction, normal) > 0.0f){
+            float3 wo_local = to_local(onb, new_direction);
+            float3 f = bsdf::Eval(mat, wi_local, wo_local);
+            weight = f / pdf;
+        }
 
-        float3 wo_local = to_local(onb, new_direction);
-        float3 f = Eval(mat, wi_local, wo_local);
-        weight = make_float3(abs(f.x), abs(f.y), abs(f.z)) / pdf;
-
+        // invalid sample
+        if(dot(weight, weight) == 0.0){
+            increment_invalid_sample(prd.origin);
+            if(prd.depth == 0)
+                prd.invalid_scatter_count = 1;
+        } else {
+            increment_valid_sample(prd.origin);
+            if(prd.depth == 0)
+                prd.valid_scatter_count = 1;
+        }
     }
 
 #if USE_NEXT_EVENT_ESTIMATION
@@ -206,75 +265,6 @@ RT_PROGRAM void closest_hit()
         // prd.result += prd.attenuation * DirectLight(mat, ffnormal, hit_point, prd);
     }
 #endif
-
-//    if(sample_type == 0 || sample_type == 1){
-//
-//        if(programId == 99){
-//            Sample_info sample_info;
-//            weight = disney::DisneySample(state, wi, ffnormal, prd.seed, sample_info.direction, sample_info.pdf);
-//            new_direction = sample_info.direction;
-//            pdf = sample_info.pdf;
-//            weight = weight * abs(dot(ffnormal, sample_info.direction)) / pdf;
-//        } else {
-//            bs  = Sample(mat, normal, wi_local, prd.seed);
-//            // BRDF Sampling
-//            new_direction = bs.wo.x * onb.m_tangent +  bs.wo.y * onb.m_binormal + bs.wo.z * onb.m_normal;
-//            weight = bs.weight;
-//            pdf = bs.pdf;
-//        }
-//
-//        if(use_mis == 1 && (bs.sampledLobe & BSDFLobe::SmoothLobe)){
-//            //Direct light Sampling
-//            prd.radiance = DirectLight(mat, normal, hit_point, wi, prd.seed);
-//            // prd.result += prd.attenuation * DirectLight(mat, ffnormal, hit_point, prd);
-//        }
-//    }
-//    else if (sample_type == 2 || sample_type == 3){
-//        if(programId == 0){
-//
-//        }
-//        else if(programId == 99){
-//            Sample_info sample_info;
-//            weight = disney::DisneySample(state, wi, ffnormal, prd.seed, sample_info.direction, sample_info.pdf);
-//            new_direction = sample_info.direction;
-//            pdf = sample_info.pdf;
-//            weight = weight * abs(dot(ffnormal, sample_info.direction)) / pdf;
-//        } else {
-//            bs  = Sample(mat, normal, wi_local, prd.seed);
-//            // BRDF Sampling
-//            new_direction = bs.wo.x * onb.m_tangent +  bs.wo.y * onb.m_binormal + bs.wo.z * onb.m_normal;
-//            weight = bs.weight;
-//            pdf = bs.pdf;
-//        }
-//    }
-//    else if (sample_type == 4){
-//        if(rnd(prd.seed) > 0.0){
-//            ///Sample_info sample_info = sampleScatteringDirectionProportionalToQSphere(hit_point, prd.seed);
-//            //Sample_info sample_info = sampleScatteringDirectionProportionalToQ(hit_point, ffnormal, false, prd.seed);
-//            Sample_info sample_info = sampleScatteringDirectionProportionalToQMCMC(hit_point, normal, prd.seed);
-//
-//            new_direction = sample_info.direction;
-//            pdf = sample_info.pdf;
-//            if(dot(new_direction, normal) <= 0.0){
-//                pdf = 0.0;
-//            }
-//        } else {
-//            // BRDF Sampling
-//            new_direction = Sample(mat, normal, wo, prd.seed);
-//            pdf = Pdf(mat, normal, wo, new_direction);
-//        }
-//    }
-//    else if (sample_type == 5){
-//        Sample_info sample_info = sampleScatteringDirectionProportionalToQReject(hit_point, normal, prd.seed);
-//        new_direction = sample_info.direction;
-//        pdf = sample_info.pdf;
-//        if(dot(new_direction, normal) <= 0.0){
-//            pdf = 0.0;
-//        }
-//    }
-    // pdf = max(pdf, 0.01);
-
-    // float3 f = Eval(mat, normal, wo, new_direction);
 
     prd.t = t_hit;
     prd.direction = new_direction;

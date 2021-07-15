@@ -1,0 +1,59 @@
+{
+  "output_folder": "../result_20210618_test_1",
+  "common_config": {
+    "scale": 4,
+    "time_limit_in_sec": 10,
+    "time_limit_init_ignore_step": 10,
+    "samples_per_pass": 8,
+    "max_depth": 16,
+    "rr_begin_depth":8,
+    "uv_n" : 16,
+    "n_cube" : 8
+  },
+  "scene": [
+    "cornell-box",
+    "cornell-box-hard",
+    "veach_door_simple",
+    "bathroom",
+    "bathroom2",
+    "kitchen",
+    "living-room",
+    "living-room-2",
+    "living-room-3",
+    "staircase",
+    "staircase2",
+    "veach-ajar"
+  ],
+  "available_gpu_ids": [0,1,2,3,4,5,6,7],
+  "config_list": [
+    {"sample_type": "brdf"},
+
+    {"sample_type": "q_brdf_rej_mix", "q_table_update_method": "sarsa"},
+    {"sample_type": "q_brdf_rej_mix", "q_table_update_method": "expected_sarsa"},
+    {"sample_type": "q_brdf_rej_mix", "q_table_update_method": "mc"},
+
+    {
+      "name": "grid",
+      "sample_type": "q_mis_quadtree",
+      "q_table_update_method": "mc",
+      "quad_tree_update_type": "gpu",
+      "directional_mapping_method": "cylindrical",
+      "directional_type": "quadtree",
+      "spatial_type": "grid",
+      "learning_method": "exponential",
+      "bsdf_sampling_fraction": 0.5
+    }
+  ,
+    {
+      "name": "binary_tree",
+      "sample_type": "q_mis_quadtree",
+      "q_table_update_method": "mc",
+      "quad_tree_update_type": "gpu",
+      "directional_mapping_method": "cylindrical",
+      "directional_type": "quadtree",
+      "spatial_type": "binary_tree",
+      "learning_method": "exponential",
+      "bsdf_sampling_fraction": 0.5
+    }
+  ]
+}

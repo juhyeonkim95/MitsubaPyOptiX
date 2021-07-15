@@ -118,8 +118,8 @@ RT_CALLABLE_PROGRAM float3 DirectLight(MaterialParameter &mat,
 
 	if (!prd_shadow.inShadow)
 	{
-	    float scatterPdf = Pdf(mat, wi_local, wo_local);
-		float3 f = Eval(mat, wi_local, wo_local);
+	    float scatterPdf = bsdf::Pdf(mat, wi_local, wo_local);
+		float3 f = bsdf::Eval(mat, wi_local, wo_local);
 
 	    // Delta light
 	    if(is_light_delta){

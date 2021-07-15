@@ -38,7 +38,7 @@ RT_CALLABLE_PROGRAM float pdf_light_area(float3 &pos, float3 &wi, LightParameter
 
 RT_CALLABLE_PROGRAM float pdf_light_tri_mesh(int hitTriIdx, float3 &pos, float3 &wi, LightParameter &light)
 {
-    const int3 v_idx = light.indice_buffer_id[hitTriIdx];
+    const int3 v_idx = light.indices_buffer_id[hitTriIdx];
 
     float3 p0 = light.pos_buffer_id[ v_idx.x ];
     float3 p1 = light.pos_buffer_id[ v_idx.y ];

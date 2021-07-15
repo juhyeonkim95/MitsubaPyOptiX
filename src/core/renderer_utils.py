@@ -24,7 +24,7 @@ def create_scene_lights(context, scene):
             light_data["envmapID"] = scene.texture_name_id_dictionary[light_data["envmap_file"]]
             print("Envmap ID selected!", light_data["envmapID"])
         light = Light(light_data)
-        print("- Light Data: ", light_data)
+        print(light)
         lights.append(np.array(light))
     np_l = np.array(lights)
     light_buffer = Buffer.from_array(np_l, dtype=Light.dtype, buffer_type='i', drop_last_dim=True)

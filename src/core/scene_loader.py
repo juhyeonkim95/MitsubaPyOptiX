@@ -129,8 +129,9 @@ def load_camera(sensor):
         camera_up = str2floatarray(lookat_attrib["up"])
         camera.load_from_lookat(camera_lookat, camera_origin, camera_up)
 
-    camera.print()
-    camera.print_lookat()
+    # Print camera info
+    print(camera)
+
     return camera
 
 

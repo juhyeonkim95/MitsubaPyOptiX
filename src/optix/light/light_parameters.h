@@ -30,7 +30,7 @@ struct LightParameter
 	float cosFalloffStart;
 	unsigned int lightType;
 	rtBufferId<float3, 1> pos_buffer_id;
-	rtBufferId<int3, 1> indice_buffer_id;
+	rtBufferId<int3, 1> indices_buffer_id;
 	rtBufferId<float3, 1> normal_buffer_id;
 	int n_triangles;
 	Matrix4x4 transformation;

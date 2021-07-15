@@ -14,7 +14,9 @@
 using namespace optix;
 rtDeclareVariable(int, programId, , );
 
+namespace bsdf{
 // Sample for wo using brdf
+// returns direction with f * cos(theta) / pdf
 RT_CALLABLE_PROGRAM BSDFSample3f Sample(const MaterialParameter &mat, const float3 &wi, unsigned int &seed)
 {
     switch(programId){
@@ -59,4 +61,5 @@ RT_CALLABLE_PROGRAM float3 Eval(const MaterialParameter &mat, const float3 &wi, 
     case 6: return roughplastic::Eval(mat, wi, wo);
     default: return make_float3(0.0f);
     }
+}
 }

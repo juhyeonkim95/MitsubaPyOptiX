@@ -2,20 +2,21 @@ import numpy as np
 import open3d as o3d
 
 from collections import deque
+import math
 
 
 class DTree:
-    def __init__(self, uuid, value_array, accumulative_array, visit_count_array, index_array, rank_array):
+    def __init__(self, uuid, value_array, index_array, rank_array):
         self.index_array = index_array
         self.rank_array = rank_array
         self.value_array = value_array
-        self.accumulative_array = accumulative_array
-        self.visit_count_array = visit_count_array
         self.max_length = len(index_array)
         self.current_size = 1
         self.select_array = np.zeros_like(self.index_array, dtype=np.uint32)
         self.depth_array = np.zeros_like(self.index_array, dtype=np.uint32)
         self.uuid = uuid
+
+
         # x = 0
         # s = 1
         # while x + s < self.max_length:
@@ -41,25 +42,39 @@ class DTree:
 
     def build_rank_array(self):
         sum = 0
-        select = -1
         for i in range(self.current_size):
             self.rank_array[i] = sum
-            self.select_array[i] = max(select, 0)
             sum += self.index_array[i]
+
+        for i in range(self.current_size):
             if self.index_array[i] == 1:
-                select += 1
+                for j in range(4):
+                    child_j = self.child(i, j)
+                    self.select_array[child_j] = i
 
     def child(self, idx, child_idx):
         return 4 * (self.rank_array[idx]) + child_idx + 1
 
     def parent(self, child_idx):
-        return self.select_array[(child_idx - 1) // 2]
+        return self.select_array[child_idx]
 
-    def update_parent_q_value(self):
+    def update_parent_radiance(self):
+        for i in reversed(range(self.current_size)):
+            if i == 0:
+                continue
+            parent_id = self.parent(i)
+            assert self.index_array[parent_id] == 1
+            self.value_array[parent_id] += self.value_array[i] * 0.25
+
+    def get_total_irradiance(self):
         irradiance = 0
+        area = 0
         for i in range(self.current_size):
             if self.index_array[i] == 0:
-                irradiance += self.value_array[i] * pow(0.5, self.depth_array[i])
+                irradiance += self.value_array[i] * pow(0.25, self.depth_array[i])
+                area += pow(0.25, self.depth_array[i])
+
+        assert area == 1.0
         return irradiance
 
         # for i in reversed(range(self.current_size)):
@@ -69,12 +84,11 @@ class DTree:
         #     self.value_array[parent_idx] += self.value_array[i]
         #     self.visit_count_array[parent_idx] += self.visit_count_array[i]
 
-    def visualize_quadtree(self):
+    def visualize_quadtree(self, image_size=512):
         q = deque()
         q.append(0)
         pose_sizes = deque()
         pose_sizes.append(((0, 0), 1))
-        image_size = 512
         result_array = np.zeros((image_size, image_size))
 
         while len(q) > 0:
@@ -105,14 +119,15 @@ class DTree:
         print("Value array", self.value_array[0:self.current_size])
         print("Index array", self.index_array[0:self.current_size])
         print("Rank array", self.rank_array[0:self.current_size])
-        print("Visit array", self.visit_count_array[0:self.current_size])
+        # print("Visit array", self.visit_count_array[0:self.current_size])
         print("Depth array", self.depth_array[0:self.current_size])
+        print("Select array", self.select_array[0:self.current_size])
 
     def update(self, threshold=0.01):
         if self.current_size == self.max_length:
             return
 
-        sum = self.update_parent_q_value()
+        sum = self.get_total_irradiance()
 
         q = deque()
         q.append((0, self.value_array[0], 0))
@@ -131,16 +146,18 @@ class DTree:
                     for i in range(4):
                         child_id = self.child(node, i)
                         q.append((child_id, self.value_array[node] / 4, depth + 1))
-                elif self.index_array[node] == 0 and self.value_array[node] * pow(0.5, depth) >= threshold * sum \
-                        and current_size + 4 <= self.max_length:
-                    index_array.append(1)
-                    for i in range(4):
-                        q.append((self.current_size + 100, self.value_array[node] / 4, depth + 1))
-                    value_array.append(0)
-                    current_size += 4
+                # leaf node
                 else:
-                    index_array.append(0)
-                    value_array.append(self.value_array[node])
+                    if self.value_array[node] * pow(0.25, depth) >= threshold * sum \
+                            and current_size + 4 <= self.max_length:
+                        index_array.append(1)
+                        for i in range(4):
+                            q.append((current_size + i, self.value_array[node] / 4, depth + 1))
+                        value_array.append(0)
+                        current_size += 4
+                    else:
+                        index_array.append(0)
+                        value_array.append(self.value_array[node])
             else:
                 index_array.append(0)
                 value_array.append(val)
@@ -152,10 +169,13 @@ class DTree:
         self.value_array[0:self.current_size] = np.array(value_array)
         self.depth_array[0:self.current_size] = np.array(depth_array)
         self.build_rank_array()
+        self.update_parent_radiance()
 
         # if self.uuid == 188:
         #     print("After")
         #     self.print()
+
+
 
     def update_old(self, threshold=0.01):
         # self.update_parent_q_value()
@@ -238,6 +258,97 @@ class Octree:
             assert 0 <= idx < self.node_number
 
 
+
+
+    # def update(self, k, c=12000):
+    #     '''
+    #     Update spatial binary tree with regard to visited count.
+    #     split if (# of sample) > c * sqrt(2 ^ k)
+    #     :return: None
+    #     '''
+    #     threshold = int(c * math.pow(2, k / 2))
+    #
+    #     new_index_array = []
+    #     new_visit_array = []
+    #
+    #     # append (node index, visit count, )
+    #     q = deque()
+    #     initial_pair = (0, self.visit_count_array[0])
+    #     q.append(initial_pair)
+    #
+    #     while len(q) > 0:
+    #         node, visited_count, depth, parent_node = q.popleft()
+    #
+    #         # existing node
+    #         if node < self.size:
+    #             visited_count = self.visit_count_array[node]
+    #             # leaf node
+    #             if self.is_leaf(node):
+    #                 if visited_count > threshold:
+    #                     new_index_array.append(1)
+    #                 else:
+    #                     new_index_array.append(0)
+    #             # internal node
+    #             else:
+    #                 new_index_array.append(1)
+    #         # newly added node
+    #         else:
+    #             new_index_array.append(0)
+
+
+    #
+    # def build_rank_array(self):
+    #     sum = 0
+    #     for i in range(self.total_size):
+    #         self.rank_array[i] = sum
+    #         sum += self.index_array[i]
+    #
+    #     for i in range(self.total_size):
+    #         if self.index_array[i] == 1:
+    #             for j in range(2):
+    #                 child_j = self.child(i, j)
+    #                 self.select_array[child_j] = i
+    #
+    # def child(self, idx, child_idx):
+    #     return 2 * (self.rank_array[idx]) + child_idx + 1
+    #
+    # def update(self, visit_array, k, c):
+    #     q = deque()
+    #     q.append((0, visit_array[0], 0))
+    #
+    #     threshold = int(c * math.pow(2, k / 2))
+    #     new_index_array = []
+    #     new_visit_array = []
+    #     new_axis_array = []
+    #     dtree_index_array = []
+    #     current_size = self.total_size
+    #
+    #     while len(q) > 0:
+    #         node, visited_count, depth, parent_node = q.popleft()
+    #         if node < self.total_size:
+    #             visited_count = visit_array[node]
+    #             # leaf node
+    #             if self.is_leaf(node):
+    #                 if visited_count > threshold:
+    #                     new_index_array.append(1)
+    #                     q.append((current_size + 0, visited_count / 2, depth + 1, node))
+    #                     q.append((current_size + 1, visited_count / 2, depth + 1, node))
+    #                     current_size += 2
+    #                 else:
+    #                     new_index_array.append(0)
+    #                     new_visit_array.append(visited_count)
+    #                     dtree_index_array.append(node)
+    #             # internal node
+    #             else:
+    #                 new_index_array.append(1)
+    #                 new_visit_array.append(visited_count)
+    #                 dtree_index_array.append(node)
+    #         else:
+    #             new_index_array.append(0)
+    #             new_visit_array.append(visited_count)
+    #             dtree_index_array.append(parent_node)
+
+
 class SDTree:
     def __init__(self, octree, n_max_dir=1000):
         self.octree = octree
@@ -251,12 +362,6 @@ class SDTree:
     def update(self):
         for dtree in self.d_trees:
             dtree.update()
-
-# Q = KdTree(2, 1000)
-# # Q.print()
-# # for _ in range(5):
-# #     Q.update()
-# #     Q.print()
 
 
 def traverse(root):

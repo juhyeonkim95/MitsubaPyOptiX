@@ -1,61 +1,10 @@
-# import numpy as np
-#
-#
-# class Light:
-#     dtype = np.dtype([
-#         ('position', np.float32, 3),
-#         ('normal', np.float32, 3),
-#         ('emission', np.float32, 3),
-#         ('u', np.float32, 3),
-#         ('v', np.float32, 3),
-#         ('radius', np.float32),
-#         ('lightType', np.uint32)
-#     ])
-#
-#     def __init__(self):
-#         # structure : [corner, v1, v2, normal, emission] (all float3)
-#         self.buffer_numpy = np.empty(1, dtype=Light.dtype)
-#
-#     @property
-#     def buffer(self):
-#         return self.buffer_numpy.tobytes()
-#
-#
-#     """
-#     __array__ is called when a BasicLight is being converted to a numpy array.
-#     Then, one can assign that numpy array to an optix variable/buffer. The format will be user format.
-#     Memory layout (dtype) must match with the corresponding C struct in the device code.
-#     """
-#     # def __array__(self):
-#     #     np_array = np.zeros(1, dtype=BasicLight.dtype)
-#     #     np_array['pos'] = self._pos
-#     #     np_array['color'] = self._color
-#     #     np_array['casts_shadow'] = 1 if self._casts_shadow else 0
-#     #     np_array['padding'] = 0
-#     #     return np_array
-#     #
-#     def set_info(self, light_data):
-#         shape_parameter = light_data["shape_data"]
-#         if shape_parameter.shape_type == "rectangle":
-#             o, u, v = shape_parameter.rectangle_info
-#             normal = np.cross(u, v)
-#             normal /= np.linalg.norm(normal)
-#             self.buffer_numpy["position"] = o
-#             self.buffer_numpy["normal"] = normal
-#             self.buffer_numpy["u"] = u
-#             self.buffer_numpy["v"] = v
-#             self.buffer_numpy["lightType"] = 0
-#             self.buffer_numpy["radius"] = 0.0
-#         elif shape_parameter.shape_type == "sphere":
-#             self.buffer_numpy["position"] = shape_parameter.center
-#             self.buffer_numpy["radius"] = shape_parameter.radius
-#             self.buffer_numpy["lightType"] = 1
-#         self.buffer_numpy["emission"] = light_data["emission"]
 import numpy as np
 import math
+from collections import OrderedDict
 
 
 class Light:
+    # Static data type
     dtype = np.dtype([
         ('position', np.float32, 3),
         ('direction', np.float32, 3),
@@ -70,7 +19,7 @@ class Light:
         ('cosFalloffStart', np.float32),
         ('lightType', np.uint32),
         ('pos_buffer_id', np.int32),
-        ('indice_buffer_id', np.int32),
+        ('indices_buffer_id', np.int32),
         ('normal_buffer_id', np.int32),
         ('n_triangles', np.int32),
         ('transformation', np.float32, (4, 4)),
@@ -79,21 +28,14 @@ class Light:
     ])
 
     def __init__(self, light_data):
-        # structure : [corner, v1, v2, normal, emission] (all float3)
-        # self.buffer_numpy = np.empty((1, ), dtype=Light.dtype)
+        """
+        Light data class.
+        :param light_data: dictionary that contains light information
+        """
         self.light_data = light_data
+        self.np_array = self.create_np_array_from_data()
 
-    # @property
-    # def buffer(self):
-    #     return self.buffer_numpy.tobytes()
-    #
-
-    """
-    __array__ is called when a BasicLight is being converted to a numpy array.
-    Then, one can assign that numpy array to an optix variable/buffer. The format will be user format.
-    Memory layout (dtype) must match with the corresponding C struct in the device code.
-    """
-    def __array__(self):
+    def create_np_array_from_data(self):
         np_array = np.zeros(1, dtype=Light.dtype)
 
         if self.light_data["type"] == "area":
@@ -122,14 +64,8 @@ class Light:
                 np_array["lightType"] = 5
                 np_array["area"] = math.pi * shape_parameter.radius * shape_parameter.radius
             elif shape_parameter.shape_type == "obj":
-                print("OBJ type light added")
-                print("Position buffer id :", shape_parameter.pos_buffer_id)
-                print("Indice buffer id :", shape_parameter.indice_buffer_id)
-                print("Normal buffer id :", shape_parameter.normal_buffer_id)
-                print("Face number :", shape_parameter.n_triangles)
-                print("Transformation :", shape_parameter.transformation)
                 np_array["pos_buffer_id"] = shape_parameter.pos_buffer_id
-                np_array["indice_buffer_id"] = shape_parameter.indice_buffer_id
+                np_array["indices_buffer_id"] = shape_parameter.indice_buffer_id
                 np_array["normal_buffer_id"] = shape_parameter.normal_buffer_id
                 np_array["n_triangles"] = shape_parameter.n_triangles
                 np_array['transformation'] = shape_parameter.transformation
@@ -158,3 +94,50 @@ class Light:
         np_array["isTwosided"] = 1 if self.light_data.get('isTwosided', False) else 0
 
         return np_array
+
+    def __str__(self):
+        infos = OrderedDict()
+        infos["Type"] = self.light_data["type"]
+
+        if self.light_data["type"] == "area":
+            shape_parameter = self.light_data["shape_data"]
+            shape_info = OrderedDict()
+            infos["Shape Info"] = shape_info
+            shape_info["Shape Type"] = shape_parameter.shape_type
+            if shape_parameter.shape_type == "rectangle":
+                shape_info["Position"] = self.np_array["position"]
+                shape_info["Normal"] = self.np_array["normal"]
+                shape_info["U"] = self.np_array["u"]
+                shape_info["V"] = self.np_array["v"]
+            elif shape_parameter.shape_type == "sphere":
+                shape_info["Position"] = self.np_array["position"]
+                shape_info["Radius"] = self.np_array["radius"]
+            elif shape_parameter.shape_type == "disk":
+                shape_info["Position"] = self.np_array["position"]
+                shape_info["Radius"] = self.np_array["radius"]
+                shape_info["Normal"] = self.np_array["normal"]
+            infos["Emission"] = self.np_array["emission"]
+
+        def recursive_print(d, level=0):
+            s = []
+            for k, v in d.items():
+                if type(v) is OrderedDict:
+                    s.append("\t" * level + "%s : " % k)
+                    s = s + recursive_print(v, level + 1)
+                else:
+                    s.append("\t" * level + "%s : %s" % (k, str(v)))
+            return s
+
+        final_string = recursive_print(infos)
+        final_string = "\n".join(["[Light]"] + final_string)
+
+        return final_string
+
+
+    """
+    __array__ is called when a BasicLight is being converted to a numpy array.
+    Then, one can assign that numpy array to an optix variable/buffer. The format will be user format.
+    Memory layout (dtype) must match with the corresponding C struct in the device code.
+    """
+    def __array__(self):
+        return self.np_array

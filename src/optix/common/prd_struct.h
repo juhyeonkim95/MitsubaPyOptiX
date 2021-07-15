@@ -34,8 +34,8 @@ struct PerRayData_pathtrace
     float pdf;
     bool isSpecular;
     int material_type;
-    int brdf_scatter_count;
-    int q_scatter_count;
+    int valid_scatter_count;
+    int invalid_scatter_count;
 };
 
 struct PerRayData_pathtrace_shadow

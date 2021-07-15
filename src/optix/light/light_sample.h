@@ -38,7 +38,7 @@ RT_FUNCTION void sample_light_area_quad(LightParameter &light, unsigned int &see
 RT_FUNCTION void sample_light_area_triangle_mesh(LightParameter &light, unsigned int &seed, AreaSample &sample)
 {
     int tri_index = optix::clamp(static_cast<int>(floorf(rnd(seed) * light.n_triangles)), 0, light.n_triangles - 1);
-    const int3 v_idx = light.indice_buffer_id[tri_index];
+    const int3 v_idx = light.indices_buffer_id[tri_index];
 
     float3 p0 = light.pos_buffer_id[ v_idx.x ];
     float3 p1 = light.pos_buffer_id[ v_idx.y ];

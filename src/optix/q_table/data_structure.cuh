@@ -2,23 +2,17 @@
 #include <optixu/optixu_matrix_namespace.h>
 #include "optix/common/rt_function.h"
 
-/// Octree related
+// Spatial Data structure
+rtDeclareVariable(float3,       scene_bbox_min, , );
+rtDeclareVariable(float3,       scene_bbox_max, , );
+rtDeclareVariable(float3,       scene_bbox_extent, , );
 
-rtBuffer<unsigned int>     stree_visit_count;
+// *********************
+// (1) Static Octree
+// *********************
+
 rtBuffer<unsigned int>     stree_index_array;
 rtBuffer<unsigned int>     stree_rank_array;
-//rtBuffer<unsigned int>     stree_rank_leaf_array;
-
-
-
-using namespace optix;
-RT_FUNCTION void incrementPositionInSTree(float3 p_)
-{
-    // Leaf node
-    //if(stree_index_array[idx] == 0){
-    //    atomicAdd(&stree_visit_count[idx], 1);
-    //}
-}
 
 RT_FUNCTION uint positionToIndexOctTree(const float3 &p_)
 {
@@ -44,13 +38,44 @@ RT_FUNCTION uint positionToIndexOctTree(const float3 &p_)
     return stree_rank_array[idx];
 }
 
+// *********************
+// (2) Adaptive Binary Tree
+// *********************
+
+rtBuffer<unsigned int>     stree_visit_count;
+rtBuffer<unsigned int>     stree_child_array;
+rtBuffer<unsigned int>     stree_parent_array;
+rtBuffer<unsigned int>     stree_axis_array;
 
 
-/// Grid related
+RT_FUNCTION uint positionToIndexAdaptiveBinaryTree(const float3 &p_)
+{
+    float3 p = p_;
+    uint idx = 0;
+    uint child_local_idx = 0;
+    while(true){
+        // Leaf node
+        if(stree_child_array[idx] == 0){
+            break;
+        }
 
-rtDeclareVariable(float3,       scene_bbox_min, , );
-rtDeclareVariable(float3,       scene_bbox_max, , );
-rtDeclareVariable(float3,       scene_bbox_extent, , );
+        uint axis = stree_axis_array[stree_child_array[idx]];
+        switch(axis){
+        case 0: if(p.x < 0.5f){p.x = 2 * p.x; child_local_idx = 0;} else{p.x = 2 * p.x - 1; child_local_idx = 1;} break;
+        case 1: if(p.y < 0.5f){p.y = 2 * p.y; child_local_idx = 0;} else{p.y = 2 * p.y - 1; child_local_idx = 1;} break;
+        case 2: if(p.z < 0.5f){p.z = 2 * p.z; child_local_idx = 0;} else{p.z = 2 * p.z - 1; child_local_idx = 1;} break;
+        }
+
+        // Go to child node
+        idx = stree_child_array[idx] + child_local_idx;
+    }
+    return idx;
+}
+
+// *********************
+// (3) Voxel
+// *********************
+
 rtDeclareVariable(uint3,        unitCubeNumber, , );
 
 RT_FUNCTION uint positionToIndexVoxel(const float3 &p)
@@ -70,13 +95,23 @@ RT_FUNCTION uint positionToIndex(const float3 &position){
     switch(spatial_table_type){
     case 0: return positionToIndexVoxel(normalized_position);
     case 1: return positionToIndexOctTree(normalized_position);
+    case 2: return positionToIndexAdaptiveBinaryTree(normalized_position);
     default: return 0;
     }
 }
 
+using namespace optix;
+RT_FUNCTION void incrementPositionInSTree(const float3 &p)
+{
+    uint positionIndex = positionToIndex(p);
+    atomicAdd(&stree_visit_count[positionIndex], 1);
+}
+
+
+// Directional data structure
 
 // *********************
-// Direction
+// (1) Grid
 // *********************
 
 rtDeclareVariable(uint2,        unitUVNumber, , );
@@ -107,6 +142,10 @@ RT_FUNCTION uint directionToIndexGrid2(const float2 &uv)
 rtBuffer<unsigned int, 2>     dtree_visit_count;
 rtBuffer<unsigned int, 2>     dtree_index_array;
 rtBuffer<unsigned int, 2>     dtree_rank_array;
+
+// *********************
+// (2) QuadTree
+// *********************
 
 RT_FUNCTION uint directionToIndexQuadTree(const uint pos_index, const float2 &p_)
 {

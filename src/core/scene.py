@@ -49,7 +49,6 @@ class Scene:
         self.lights = []
         self.width = 0
         self.height = 0
-        self.annonymous_material_count = 0
         self.has_envmap = False
 
     def load_scene_from(self, file_name):
@@ -259,7 +258,7 @@ class Scene:
     def load_shapes(self, root):
         shape_list = []
         obj_list = []
-        annonymous_material_count = 0
+        anonymous_material_count = 0
 
         for shape in root.findall('shape'):
             # 1. load shape
@@ -278,8 +277,8 @@ class Scene:
                     bsdf = root.find('bsdf[@id="%s"]' % bsdf_id)
                     material_parameter = self.load_new_material(bsdf)
             else:
-                bsdf_id = "annonymous_material_%d" % annonymous_material_count
-                annonymous_material_count += 1
+                bsdf_id = "anonymous_material_%d" % anonymous_material_count
+                anonymous_material_count += 1
                 bsdf = shape.find("bsdf")
                 material_parameter = self.load_new_material(bsdf, bsdf_id=bsdf_id)
 

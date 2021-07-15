@@ -7,7 +7,7 @@
 # 	renderer = Renderer()
 # 	#scene_name = "material-testball"
 # 	scene_name = "bathroom"
-# 	image = renderer.render(scene_name, spp=256, use_mis=False)
+# 	image = renderer.render(scene_name, _spp=256, use_mis=False)
 #
 # 	plt.imshow(image)
 # 	plt.show()
@@ -19,14 +19,7 @@
 # if __name__ == '__main__':
 # 	test()
 
-from core.renderer import *
-import datetime
-from utils.image_utils import *
-from utils.io_utils import *
-
-from collections import OrderedDict
-import pandas as pd
-import json
+from test_utils import *
 
 
 def make_reference_image_multiple(scene_names=None, scale=1, diffuse_only=False):
@@ -44,7 +37,7 @@ def make_reference_image_multiple(scene_names=None, scale=1, diffuse_only=False)
     for scene_name in scene_names:
         common_params = {
             'scene_name': scene_name,
-            'spp': 4096 * 32,
+            '_spp': 4096 * 32,
             'samples_per_pass': 128 * scale * scale,
             'max_depth': 32,
             'rr_begin_depth': 32,
@@ -61,7 +54,7 @@ def make_reference_image_single(scene_name, scale=4, force_all_diffuse=False):
     renderer = Renderer(scale=scale, force_all_diffuse=force_all_diffuse)
     common_params = {
         'scene_name': scene_name,
-        'spp': 1024,
+        '_spp': 1024,
         'samples_per_pass': 64,
         'max_depth': 8,
         'rr_begin_depth': 8,
@@ -76,16 +69,6 @@ def make_reference_image_single(scene_name, scale=4, force_all_diffuse=False):
 # save_pred_images(image['image'], "../reference_images2/%s_%s" % (scene_name, file_name))
 
 
-def test_multiple_and_export_result(scene_list, scale, output_folder, _time=5, spp=256, test_time=False):
-    for scene in scene_list:
-        #try:
-        test(scene, scale, test_time=test_time, show_result=False, time=_time, spp=spp, output_folder=output_folder)
-        #except Exception:
-        #    print("Scene Error")
-
-    update_total_result(output_folder)
-
-
 def export_radiance(scene_name, scale=4, n_uvs=None, render_reference=True, export=False):
     reference_parent_folder = '../reference_images/%s/scale_%d' % ("standard", scale)
     ref_image = load_reference_image(reference_parent_folder, scene_name)
@@ -94,9 +77,9 @@ def export_radiance(scene_name, scale=4, n_uvs=None, render_reference=True, expo
     renderer.reference_image = ref_image
     n_cube = 8
     coord = (2, 7, 4)
-    common_params = {'scene_name': scene_name, 'samples_per_pass': 16, 'show_picture': False, 'max_depth': 16,
+    common_params = {'scene_name': scene_name, 'samples_per_pass': 8, 'show_picture': False, 'max_depth': 16,
                      'rr_begin_depth': 8, 'scene_epsilon': 1e-5, 'accumulative_q_table_update': True,
-                     'n_cube': n_cube, 'spp': 1024*16, 'time_limit_init_ignore_step':10}
+                     'n_cube': n_cube, '_spp': 1024*16, 'time_limit_init_ignore_step':0}
 
     pos = np.array(coord, dtype=np.float32) / n_cube
     size = np.array([1 / n_cube] * 3, dtype=np.float32)
@@ -129,7 +112,7 @@ def export_radiance(scene_name, scale=4, n_uvs=None, render_reference=True, expo
     if n_uvs is None:
         n_uvs = [8]
     keys = ["expected_sarsa", "monte_carlo", "sarsa", "sarsa2"]
-    target_exports = ["time", "mean_absolute_error", "mean_error", "variance"]
+    target_exports = ["_time", "mean_absolute_error", "mean_error", "variance"]
 
     for t in target_exports:
         total_result_to_export[t] = OrderedDict()
@@ -138,12 +121,12 @@ def export_radiance(scene_name, scale=4, n_uvs=None, render_reference=True, expo
 
     for n_uv in n_uvs:
         # renderer.render(**common_params, spherical_pos=pos, spherical_size=size, spherical_map_type=1)
-        common_params["spp"] = 1024
+        common_params["_spp"] = 1024
         common_params["uv_n"] = n_uv
         total_result["expected_sarsa"] = renderer.render(**common_params,
                                  sample_type=SAMPLE_COSINE,
                                  force_update_q_table=True,
-                                 q_table_update_method=Q_UPDATE_EXPECTED_SARSA)
+                                 q_table_update_method=SAMPLE_COSINE)
         total_result["monte_carlo"] = renderer.render(**common_params,
                                  sample_type=SAMPLE_COSINE,
                                  force_update_q_table=True,
@@ -181,22 +164,30 @@ def export_radiance(scene_name, scale=4, n_uvs=None, render_reference=True, expo
 
             field_image = Image.fromarray(field)
             field_image = field_image.resize(radiance_field_gt_image.size, Image.NEAREST)
-            error = np.asarray(field_image) - radiance_field_gt
+            field_resized = np.asarray(field_image)
+
+            error = field_resized - radiance_field_gt
+            pdf_error = field_resized / np.sum(field_resized) - radiance_field_gt / np.sum(radiance_field_gt)
+            rel_error = np.divide(error, radiance_field_gt, out=np.zeros_like(radiance_field_gt),
+                                                          where=radiance_field_gt != 0.0)
+            error = rel_error
             mean_error = np.mean(error)
             mean_absolute_error = np.abs(error).mean()
             error_variance = np.std(error)
 
             fig = plt.figure()
             plt.imshow(np.asarray(field_image), vmin=np.min(radiance_field_gt), vmax=np.max(radiance_field_gt))
+            # plt.imshow(error)
+
             plt.axis('off')
             plt.show()
-            print(key, error)
+            print(key, mean_absolute_error)
             elapsed_time_per_sample = total_result[key]['elapsed_time_per_sample_except_init']
 
             total_result_to_export["mean_absolute_error"][key].append(mean_absolute_error)
             total_result_to_export["mean_error"][key].append(mean_error)
             total_result_to_export["variance"][key].append(error_variance)
-            total_result_to_export["time"][key].append(elapsed_time_per_sample)
+            total_result_to_export["_time"][key].append(elapsed_time_per_sample)
 
             if export:
                 fig.savefig('../result_radiance_examples/%s_uv_%d_radiance.png' % (key, n_uv), bbox_inches='tight', pad_inches=0)
@@ -204,8 +195,6 @@ def export_radiance(scene_name, scale=4, n_uvs=None, render_reference=True, expo
         for t in target_exports:
             df = pd.DataFrame(total_result_to_export[t], index=n_uvs)
             df.to_csv('../result_radiance_examples/%s.csv' % t)
-        #df2 = pd.DataFrame(times, index=n_uvs)
-        #df2.to_csv('../result_radiance_examples/elapsed_time.csv')
 
 
 # coo = result["q_table_visit_count_final"].reshape((n_cube, n_cube, n_cube, -1))
@@ -228,221 +217,7 @@ def export_radiance(scene_name, scale=4, n_uvs=None, render_reference=True, expo
 # visualize("q_table_visit_count_final")
 
 
-def test(scene_name, scale=4, test_time=False, show_picture=False, show_result=False,
-         output_folder=None, force_all_diffuse=False, time=5, spp=256, _sample_type=SAMPLE_Q_COS_REJECT, _update_type=Q_UPDATE_MONTE_CARLO):
-    diffuse_folder = "diffuse_only" if force_all_diffuse else "standard"
-    reference_parent_folder = '../reference_images/%s/scale_%d' % (diffuse_folder, scale)
 
-    ref_image = load_reference_image(reference_parent_folder, scene_name)
-
-    total_results = OrderedDict()
-    renderer = Renderer(scale=scale, force_all_diffuse=force_all_diffuse)
-    renderer.reference_image = ref_image
-
-    common_params = {
-        'scene_name': scene_name,
-        'samples_per_pass': 8,
-        'show_picture': show_picture,
-        'max_depth': 16,
-        'rr_begin_depth': 8,
-        'scene_epsilon': 1e-5,
-        # You should change q_table_old at getQValue to q_table
-        'accumulative_q_table_update': True,
-        'uv_n': 16,
-        'n_cube': 8,
-        #'spatial_type':'octree'
-    }
-
-    if test_time:
-        time_limit_in_secs = {1: 60, 2: 20, 4: 5}
-        common_params['time_limit_in_sec'] = time #time_limit_in_secs[scale]
-    else:
-        common_params['spp'] = spp#1024
-    common_params['time_limit_init_ignore_step'] = 10
-    # renderer.construct_stree(scene_name, max_octree_depth=4, max_path_depth=3)
-    #
-    # result = renderer.render(**common_params, sample_type=SAMPLE_COSINE, force_update_q_table=True)
-    # normals = result['q_table_info'].q_table_normal_counts
-    # normals = normals.astype(np.float32)
-    # print(normals[122])
-    # print(normals.dtype)
-    # normals /= (np.sum(normals, axis=1, keepdims=True, dtype=np.float32) + 0.0001)
-    # normals_stdev = np.std(normals, axis=1)
-    # print(normals_stdev)
-
-    total_results["brdf"] = renderer.render(**common_params, sample_type=SAMPLE_COSINE)
-
-    def test_1():
-        # (1) Hemisphere - Inversions
-        total_results["q_brdf_inv_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, q_table_update_method=Q_UPDATE_SARSA)
-        total_results["q_brdf_inv_expected_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, q_table_update_method=Q_UPDATE_EXPECTED_SARSA)
-        total_results["q_brdf_inv_mc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, q_table_update_method=Q_UPDATE_MONTE_CARLO)
-
-        # (2) Hemisphere - Rejections
-        total_results["q_brdf_rej_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT, q_table_update_method=Q_UPDATE_SARSA)
-        total_results["q_brdf_rej_expected_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT, q_table_update_method=Q_UPDATE_EXPECTED_SARSA)
-        total_results["q_brdf_rej_mc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT, q_table_update_method=Q_UPDATE_MONTE_CARLO)
-
-        # (2.5) Hemisphere - Rejections + MIX
-        total_results["q_brdf_rej_sarsa_mix"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT_MIX, q_table_update_method=Q_UPDATE_SARSA)
-        total_results["q_brdf_rej_expected_sarsa_mix"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT_MIX, q_table_update_method=Q_UPDATE_EXPECTED_SARSA)
-        total_results["q_brdf_rej_mc_mix"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT_MIX, q_table_update_method=Q_UPDATE_MONTE_CARLO)
-
-        # (3) Hemisphere - MCMC
-        total_results["q_brdf_mcmc_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC, q_table_update_method=Q_UPDATE_SARSA)
-        total_results["q_brdf_mcmc_expected_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC, q_table_update_method=Q_UPDATE_EXPECTED_SARSA)
-        total_results["q_brdf_mcmc_mc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC, q_table_update_method=Q_UPDATE_MONTE_CARLO)
-
-        # (4) Sphere - Inversions (CDF used + 0.5 BRDF)
-        total_results["q_mis_sphere_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_SPHERE, q_table_update_method=Q_UPDATE_SARSA, brdf_proportion=0.5)
-        total_results["q_mis_sphere_expected_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_SPHERE, q_table_update_method=Q_UPDATE_EXPECTED_SARSA, brdf_proportion=0.5)
-        total_results["q_mis_sphere_mc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_SPHERE, q_table_update_method=Q_UPDATE_MONTE_CARLO, brdf_proportion=0.5)
-
-        # Muller 17
-        total_results["q_mis_quadtree_mc"] = renderer.render(**common_params,
-                                         sample_type=SAMPLE_Q_QUADTREE,
-                                         force_update_q_table=True,
-                                         directional_mapping_method="cylindrical",
-                                         directional_type="quadtree",
-                                         learning_method="exponential",
-                                         brdf_proportion=0.5,
-                                         q_table_update_method=Q_UPDATE_MONTE_CARLO)
-
-    def test_2():
-        common_params["time_consider_only_optix"] = True
-        total_results["q_brdf_rej_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT,
-                                                            q_table_update_method=Q_UPDATE_SARSA)
-
-        # Muller 17
-        total_results["q_mis_quadtree_sarsa"] = renderer.render(**common_params,
-                                                             sample_type=SAMPLE_Q_QUADTREE,
-                                                             force_update_q_table=True,
-                                                             directional_mapping_method="cylindrical",
-                                                             directional_type="quadtree",
-                                                             learning_method="exponential",
-                                                             brdf_proportion=0.5,
-                                                             q_table_update_method=Q_UPDATE_SARSA)
-        # Muller 17
-        total_results["q_mis_quadtree_mc"] = renderer.render(**common_params,
-                                                             sample_type=SAMPLE_Q_QUADTREE,
-                                                             force_update_q_table=True,
-                                                             directional_mapping_method="cylindrical",
-                                                             directional_type="quadtree",
-                                                             learning_method="exponential",
-                                                             brdf_proportion=0.5,
-                                                             q_table_update_method=Q_UPDATE_MONTE_CARLO)
-
-    def test_3(name, sample_type, update_type):
-        #target_epsilon = [0.0, 0.1, 0.2, 0.5, 0.8, 0.9, 1.0]
-        target_epsilon = [0.0,
-                          0.001, 0.002, 0.005,
-                          0.01, 0.02, 0.05,
-                          0.1, 0.2,
-                          0.5,
-                          0.8, 0.9,
-                          0.95, 0.98, 0.99,
-                          0.995, 0.998, 0.999,
-                          1.0]
-        for epsilon in target_epsilon:
-            total_results[name+"_"+str(epsilon)] = renderer.render(**common_params, sample_type=sample_type,
-                                                                   q_table_update_method=update_type, min_epsilon=epsilon)
-
-    #test_1()
-
-    #def test_4():
-    #    total_results["q_cos_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, q_table_update_method=Q_UPDATE_SARSA)
-    #    total_results["q_cos_qlearning"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, q_table_update_method=Q_UPDATE_Q_LEARNING)
-
-    # Test update value
-    test_3("expected_sarsa", SAMPLE_Q_COS_REJECT, Q_UPDATE_EXPECTED_SARSA)
-    test_3("sarsa", SAMPLE_Q_COS_REJECT, Q_UPDATE_SARSA)
-    test_3("sarsa2", SAMPLE_Q_COS_REJECT, Q_UPDATE_SARSA2)
-    test_3("mc", SAMPLE_Q_COS_REJECT, Q_UPDATE_MONTE_CARLO)
-
-    # total_results["expected_sarsa"] = renderer.render(**common_params, q_table_update_method=Q_UPDATE_EXPECTED_SARSA, sample_type=SAMPLE_Q_COS_REJECT, min_epsilon=0.0)
-    # total_results["expected_sarsa_mix"] = renderer.render(**common_params, q_table_update_method=Q_UPDATE_EXPECTED_SARSA, sample_type=SAMPLE_Q_COS_REJECT_MIX, min_epsilon=0.0)
-    # total_results["sarsa"] = renderer.render(**common_params,q_table_update_method=Q_UPDATE_SARSA, sample_type=SAMPLE_Q_COS_REJECT, min_epsilon=0.0)
-    # total_results["sarsa_mix"] = renderer.render(**common_params,q_table_update_method=Q_UPDATE_SARSA, sample_type=SAMPLE_Q_COS_REJECT_MIX, min_epsilon=0.0)
-    # total_results["sarsa2"] = renderer.render(**common_params,q_table_update_method=Q_UPDATE_SARSA2, sample_type=SAMPLE_Q_COS_REJECT, min_epsilon=0.0)
-    # total_results["sarsa2_mix"] = renderer.render(**common_params,q_table_update_method=Q_UPDATE_SARSA2, sample_type=SAMPLE_Q_COS_REJECT_MIX, min_epsilon=0.0)
-    # total_results["mc"] = renderer.render(**common_params,q_table_update_method=Q_UPDATE_MONTE_CARLO, sample_type=SAMPLE_Q_COS_REJECT, min_epsilon=0.0)
-    # total_results["mc_mix"] = renderer.render(**common_params,q_table_update_method=Q_UPDATE_MONTE_CARLO, sample_type=SAMPLE_Q_COS_REJECT_MIX, min_epsilon=0.0)
-
-
-    #test_3(sample_type=SAMPLE_Q_COS_REJECT, update_type=Q_UPDATE_Q_LEARNING)
-
-    # total_results["q_brdf_mcmc_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC,
-    #                                                     q_table_update_method=Q_UPDATE_SARSA)
-
-    #total_results["q_mis_sphere_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_QUADTREE, q_table_update_method=Q_UPDATE_SARSA, brdf_proportion=0.5)
-
-    #total_results["q_brdf_rej_expected_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT, q_table_update_method=Q_UPDATE_EXPECTED_SARSA)
-    #total_results["q_brdf_rej_mc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT, q_table_update_method=Q_UPDATE_MONTE_CARLO)
-    #total_results["q_brdf_rej_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT, q_table_update_method=Q_UPDATE_SARSA)
-
-    #total_results["q_brdf_mcmc_expected_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC, q_table_update_method=Q_UPDATE_EXPECTED_SARSA)
-    #total_results["q_brdf_mcmc_mc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC, q_table_update_method=Q_UPDATE_MONTE_CARLO)
-    #total_results["q_brdf_mcmc_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC, q_table_update_method=Q_UPDATE_SARSA)
-
-    # total_results["q_sphere"] = renderer.render(**common_params, sample_type=SAMPLE_Q_SPHERE)
-    # total_results["q_sphere_reject"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT)
-    # total_results["q_sphere_mcmc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC)
-
-    #total_results["oct_q"] = renderer.render(**common_params, sample_type=SAMPLE_Q_PROPORTION, spatial_type='octree')
-    #total_results["oct_q_brdf"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, spatial_type='octree')
-    #total_results["oct_q_sphere"] = renderer.render(**common_params, sample_type=SAMPLE_Q_SPHERE, spatial_type='octree')
-
-    #total_results["q_quadtree"] = renderer.render(**common_params, sample_type=SAMPLE_COSINE, directional_type='quadtree', force_update_q_table=True)
-
-    #total_results["q_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_PROPORTION, q_table_update_method=Q_UPDATE_SARSA)
-    #total_results["q_brdf_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, q_table_update_method=Q_UPDATE_SARSA)
-    #total_results["q_mc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_PROPORTION, q_table_update_method=Q_UPDATE_MONTE_CARLO)
-    #total_results["q_brdf_mc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, q_table_update_method=Q_UPDATE_MONTE_CARLO)
-
-    #total_results["q_sphere"] = renderer.render(**common_params, sample_type=SAMPLE_Q_SPHERE)
-    #total_results["q_quad"] = renderer.render(**common_params, directional_type='quadtree',
-    #                                          q_table_update_method=Q_UPDATE_SARSA)
-
-    # total_results["q_oct"] = renderer.render(**common_params, sample_type=SAMPLE_Q_PROPORTION, spatial_type='octree')
-    # total_results["q_brdf_oct"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, spatial_type='octree')
-
-    # total_results["q_brdf_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_PROPORTION, q_table_update_method=Q_UPDATE_SARSA)
-    # total_results["q_brdf_rej"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT)
-    # total_results["q_brdf_rej_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT, q_table_update_method=Q_UPDATE_SARSA)
-    # total_results["q_brdf_mcmc"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC)
-    # total_results["q_brdf_mcmc_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_MCMC, q_table_update_method=Q_UPDATE_SARSA)
-
-    if show_result:
-        show_result_bar(total_results, "error_mean")
-        show_result_bar(total_results, "elapsed_time_per_sample")
-        show_result_bar(total_results, "elapsed_time_per_sample_except_init")
-
-        show_result_bar(total_results, "total_hit_percentage")
-        if test_time:
-            show_result_bar(total_results, "completed_samples")
-        show_result_sequence(total_results, "hit_count_sequence")
-        show_result_sequence(total_results, "elapsed_times")
-
-    if output_folder is not None:
-        scene_output_folder = "%s/%s" % (output_folder, scene_name)
-
-        # export images
-        if not os.path.exists(scene_output_folder):
-            os.makedirs(scene_output_folder)
-        for k, v in total_results.items():
-            save_pred_images(v['image'], "%s/images/%s" % (scene_output_folder, k))
-
-        # export csv
-        df = pd.DataFrame(total_results)
-        df.drop(["image", "elapsed_times", "hit_count_sequence", "q_table_info"], inplace=True)
-        df.to_csv("%s/result.csv" % scene_output_folder)
-
-        # export json
-        with open('%s/setting.json' % scene_output_folder, 'w') as fp:
-            json.dump(common_params, fp)
-        return df
-
-    return total_results
 
 
 def test2(scene_name, scale=4, test_time=False, show_picture=False, show_result=False,
@@ -471,7 +246,7 @@ def test2(scene_name, scale=4, test_time=False, show_picture=False, show_result=
         time_limit_in_secs = {1: 60, 2: 20, 4: 5}
         common_params['time_limit_in_sec'] = time_limit_in_secs[scale]
     else:
-        common_params['spp'] = 1024
+        common_params['_spp'] = 1024
     common_params['time_limit_init_ignore_step'] = 10
 
     total_results["uniform"] = renderer.render(**common_params, sample_type=SAMPLE_UNIFORM)
@@ -556,35 +331,45 @@ if __name__ == '__main__':
     total_dict = OrderedDict()
     #update_total_result("../result_0411_1/scale_4_time_5", test_time=True)
     #test_multiple_and_export_result(all_scenes, 4, "../result_0412_1/scale_4_time_5", test_time=True, _time=5)
-    #test_multiple_and_export_result(all_scenes, 4, "../result_0412_1/scale_4_spp_256", test_time=False, spp=256)
+    #test_multiple_and_export_result(all_scenes, 4, "../result_0412_1/scale_4_spp_256", test_time=False, _spp=256)
     #test_multiple_and_export_result(all_scenes, 4, "../result_0412_1/scale_4_time_10", test_time=True, _time=10)
-    #test_multiple_and_export_result(all_scenes, 4, "../result_0412_1/scale_4_spp_1024", test_time=False, spp=1024)
+    #test_multiple_and_export_result(all_scenes, 4, "../result_0412_1/scale_4_spp_1024", test_time=False, _spp=1024)
 
     #test_multiple_and_export_result(all_scenes, 2, "../result_0412_3/scale_2_time_20", test_time=True, _time=20)
-    #test_multiple_and_export_result(all_scenes, 2, "../result_0412_3/scale_2_spp_256", test_time=False, spp=256)
+    #test_multiple_and_export_result(all_scenes, 2, "../result_0412_3/scale_2_spp_256", test_time=False, _spp=256)
     #test_multiple_and_export_result(all_scenes, 2, "../result_0412_3/scale_2_time_40", test_time=True, _time=40)
-    #test_multiple_and_export_result(all_scenes, 2, "../result_0412_3/scale_2_spp_1024", test_time=False, spp=1024)
-    #test_multiple_and_export_result(all_scenes, 4, "../result_0412_3/scale_4_spp_1024", test_time=False, spp=1024)
+    #test_multiple_and_export_result(all_scenes, 2, "../result_0412_3/scale_2_spp_1024", test_time=False, _spp=1024)
+    #test_multiple_and_export_result(all_scenes, 4, "../result_0412_3/scale_4_spp_1024", test_time=False, _spp=1024)
 
     #test_multiple_and_export_result(all_scenes, 4, "../result_0414_compare_epsilon_opt/scale_4_time_5", test_time=True, _time=5)
     #test_multiple_and_export_result(all_scenes, 4, "../result_0414_compare_epsilon_opt/scale_4_time_10", test_time=True, _time=10)
     #test_multiple_and_export_result(all_scenes, 2, "../result_0414_compare_epsilon_opt/scale_2_time_40", test_time=True, _time=40)
     #test_multiple_and_export_result(all_scenes, 2, "../result_0414_compare_epsilon_opt/scale_2_time_20", test_time=True, _time=20)
-    test_multiple_and_export_result(all_scenes, 2, "../result_0414_2_compare_epsilons/scale_2_time_40", test_time=True, _time=40)
+    #test_multiple_and_export_result(all_scenes, 2, "../result_0414_2_compare_epsilons/scale_2_time_40", test_time=True, _time=40)
 
-    #test_multiple_and_export_result(all_scenes, 4, "../result_rejection_quad_tree_test/scale_4_time_10", test_time=True, _time=10)
+    # test_multiple_and_export_result(all_scenes, 4, "../result_rejection_quad_tree_test/scale_4_time_10", test_time=True, _time=10)
+    # test_multiple_and_export_result(all_scenes, 2, "../result_0414_2_compare_epsilons/scale_2_time_40", test_time=True, _time=40)
+    #test_multiple_and_export_result(all_scenes, 4, "../result_memoization_compare/scale_4_time_5", test_time=True, _time=5)
+    #test_multiple_and_export_result(all_scenes, 4, "../result_memoization_compare/scale_4_spp_256", test_time=False, _spp=256)
+    #test_multiple_and_export_result(all_scenes, 4, "../result_memoization_compare/scale_4_spp_256", test_time=False, _spp=256)
+    #test_multiple_and_export_result(all_scenes, 2, "../result_memoization_compare/scale_2_time_40", test_time=True, _time=40)
+    #test_multiple_and_export_result(all_scenes, 2, "../result_memoization_compare/scale_2_spp_256", test_time=False, _spp=256)
 
-    # test("cornell-box", 4, test_time=True, show_picture=False, show_result=True, time=5,
+    #test_multiple_and_export_result(all_scenes, 2, "../result_quadtree_again/scale_2_time_40", test_time=True, _time=40)
+
+    # test("cornell-box", 4, test_time=True, show_picture=False, show_result=True, _time=5,
     #      sample_type=SAMPLE_Q_COS_REJECT, update_type=Q_UPDATE_MONTE_CARLO)
-    #test("cornell-box", 4, test_time=True, show_picture=False, show_result=True, time=5)
-    #test("cornell-box", 4, test_time=True, show_picture=False, show_result=True, time=5,
+    #test("cornell-box", 4, test_time=True, show_picture=False, show_result=True, _time=5)
+    #test("cornell-box", 4, test_time=True, show_picture=False, show_result=True, _time=5,
     #     sample_type=SAMPLE_Q_COS_REJECT, update_type=Q_UPDATE_Q_LEARNING)
-    # test("cornell-box", 4, test_time=True, show_picture=False, show_result=True, time=5,
+    # test("cornell-box", 4, test_time=True, show_picture=False, show_result=True, _time=5,
     #      sample_type=SAMPLE_Q_COS_REJECT, update_type=Q_UPDATE_EXPECTED_SARSA)
+    # test("cornell-box", 4, test_time=False, show_picture=True, show_result=True, _spp=1024)
+    #test("cornell-box", 4, test_time=False, show_picture=True, show_result=True, _spp=1024, output_folder="result_light_hit_experiment")
 
-    # test("cornell-box", 4, test_time=True, show_picture=True, show_result=True, time=5)
-    #update_total_result("../result_0412_2/scale_2_time_40", test_time=True)
-    #export_radiance("cornell-box", 4, n_uvs=[8, 16, 32], render_reference=False, export=True)
+    #test("cornell-box", 4, test_time=True, show_picture=False, show_result=True, _time=10, output_folder="epsilon_cornell_box_experiment")
+    #update_total_result("../result_0414_compare_epsilon_opt/scale_2_time_40", test_time=True)
+    #export_radiance("cornell-box", 4, n_uvs=[16], render_reference=False, export=True)
 
 # total_dict["q_brdf_sarsa"] = {'sample_type': SAMPLE_Q_COS_PROPORTION, 'q_table_update_method': Q_UPDATE_SARSA}
 # total_dict["q_brdf_rej"] = {'sample_type': SAMPLE_Q_COS_REJECT}

@@ -30,7 +30,9 @@ def update_total_result(output_folder, test_time=False):
     export_single_value(result_grouped, output_folder, "error_mean")
     export_single_value(result_grouped, output_folder, "total_elapsed_time")
     export_single_value(result_grouped, output_folder, "elapsed_time_per_sample_except_init")
+    export_single_value(result_grouped, output_folder, "elapsed_time_per_sample")
     export_single_value(result_grouped, output_folder, "total_hit_percentage")
+    export_single_value(result_grouped, output_folder, "invalid_sample_rate")
 
     if test_time:
         export_single_value(result_grouped, output_folder, "completed_samples")

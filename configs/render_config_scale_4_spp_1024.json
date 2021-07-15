@@ -1,0 +1,15 @@
+{
+  "output_folder": "../result_20210519_multi_test_scale_4_spp_1024",
+  "common_config": {
+    "scale": 4,
+    "spp": 1024,
+    "time_limit_init_ignore_step": 10,
+    "samples_per_pass": 8,
+    "max_depth": 16,
+    "rr_begin_depth":8,
+    "uv_n" : 16,
+    "n_cube" : 8
+  },
+
+  "include": "../configs/test_configs_all.json"
+}
