@@ -1,6 +1,6 @@
 #pragma once
 #include <optixu/optixu_vector_types.h>
-#include "optix/bsdf/bsdf_lobes.h"
+#include "optix/bsdf/bsdf_flags.h"
 
 using namespace optix;
 

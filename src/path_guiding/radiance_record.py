@@ -56,6 +56,8 @@ class QTable:
             index = self.spatial_binary_tree.position_to_index(p)
             print("Index", p, index)
             self.directional_quadtree.dtrees[index].visualize_quadtree()
+        else:
+            self.directional_quadtree.dtrees[188].visualize_quadtree()
 
     @staticmethod
     def register_empty_context(context):
@@ -224,6 +226,9 @@ class QTable:
         if self.accumulative_q_table_update:
             context['q_table_accumulated'].copy_to_array(self.q_table_accumulated)
             context['q_table_visit_counts'].copy_to_array(self.q_table_visit_counts)
+            print("Visit count sum", np.sum(self.q_table_visit_counts))
+            print("q_table_accumulated sum", np.sum(self.q_table_accumulated))
+
             self.q_table[:] = np.divide(self.q_table_accumulated, self.q_table_visit_counts,
                                      out=np.zeros_like(self.q_table),
                                      where=self.q_table_visit_counts != 0.0)
@@ -232,6 +237,7 @@ class QTable:
             context['q_table'].copy_to_array(self.q_table)
 
         if self.directional_type == 'quadtree':
+            # print("QUADTREE VISUALIZE")
             # self.visualize_radiance(np.array([0.4, 0.5, 0.1]))
 
             if self.spatial_type == "binary_tree":
@@ -251,9 +257,10 @@ class QTable:
                 c = kwargs.get("binary_tree_split_sample_number", 12000)
                 threshold = int(math.pow(2, k / 2) * c)
                 self.spatial_binary_tree.copy_from_context(context)
+                self.spatial_binary_tree.visit_count_array[:] = np.sum(self.q_table_visit_counts, axis=1)
 
                 copy_pairs = self.spatial_binary_tree.refine(threshold, invalid_rates, invalid_rate_threshold)
-                #self.spatial_binary_tree.visualize()
+                # self.spatial_binary_tree.visualize()
 
                 self.spatial_binary_tree.copy_to_context(context)
                 print("Copy pairs", copy_pairs)

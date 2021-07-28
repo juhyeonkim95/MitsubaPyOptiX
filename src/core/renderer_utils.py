@@ -1,9 +1,13 @@
 from pyoptix import Group, Acceleration, Buffer
-import numpy as np
-from core.light import Light
-from core.parameters import MaterialParameter
+from core.textures.texture import Texture
 from core.utils.math_utils import *
+from utils.timing_utils import *
+from core.bsdfs.bsdf import BSDF
+from core.emitters.emitter import Emitter
 
+
+
+@timing
 def create_geometry(context, scene):
     geometry_instances = scene.geometry_instances
     light_instances = scene.light_instances
@@ -17,29 +21,46 @@ def create_geometry(context, scene):
     context['top_object'] = group
 
 
+@timing
 def create_scene_lights(context, scene):
-    lights = []
-    for light_data in scene.lights:
-        if light_data["type"] == "envmap":
-            light_data["envmapID"] = scene.texture_name_id_dictionary[light_data["envmap_file"]]
-            print("Envmap ID selected!", light_data["envmapID"])
-        light = Light(light_data)
-        print(light)
-        lights.append(np.array(light))
-    np_l = np.array(lights)
-    light_buffer = Buffer.from_array(np_l, dtype=Light.dtype, buffer_type='i', drop_last_dim=True)
-    context["lights"] = light_buffer
+    np_lights = np.array([np.array(x) for x in scene.light_list])
+    print("Light list", np_lights)
+    light_buffer = Buffer.from_array(np_lights, dtype=Emitter.dtype, buffer_type='i', drop_last_dim=True)
+    context["sysLightParameters"] = light_buffer
+
+    # lights = []
+    # for light_data in scene.lights:
+    #     if light_data["type"] == "envmap":
+    #         light_data["envmapID"] = scene.texture_name_to_optix_index_dictionary[light_data["envmap_file"]]
+    #         print("Envmap ID selected!", light_data["envmapID"])
+    #     light = Light(light_data)
+    #     print(light)
+    #     lights.append(np.array(light))
+    # np_l = np.array(lights)
+    # light_buffer = Buffer.from_array(np_l, dtype=Light.dtype, buffer_type='i', drop_last_dim=True)
+    # context["lights"] = light_buffer
 
 
+@timing
 def create_scene_materials(context, scene):
     materials = []
     for m in scene.material_list:
         m_np = np.array(m)
         materials.append(m_np)
 
-    np_l = np.array(materials)
-    sysMaterialParameters = Buffer.from_array(np_l, dtype=MaterialParameter.dtype, buffer_type='i', drop_last_dim=True)
-    context["sysMaterialParameters"] = sysMaterialParameters
+    textures = []
+    for t in scene.texture_list:
+        textures.append(np.array(t))
+
+    np_materials = np.array([np.array(x) for x in scene.material_list])
+    print("Material list", np_materials)
+
+    context["sysMaterialParameters"] = Buffer.from_array(np_materials, dtype=BSDF.dtype, buffer_type='i', drop_last_dim=True)
+    if len(scene.texture_list) > 0:
+        np_textures = np.array([np.array(x) for x in scene.texture_list])
+        context["sysTextureParameters"] = Buffer.from_array(np_textures, dtype=Texture.dtype, buffer_type='i', drop_last_dim=True)
+    else:
+        context["sysTextureParameters"] = Buffer.empty((1, 1), Texture.dtype, buffer_type='i', drop_last_dim=True)
 
 
 def create_q_table_related(context, room_size, height, width, N_CUBE, UV_N, octree):

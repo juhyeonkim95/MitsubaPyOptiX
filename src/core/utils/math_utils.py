@@ -58,7 +58,7 @@ def get_bbox_transformed(bbox: BoundingBox, transformation):
 
         v = np.array([bbox_x, bbox_y, bbox_z, 1])
         tv = transformation.dot(v)
-        tv = v[0:3]
+        tv = tv[0:3]
         tvs.append(tv)
 
     tvs = np.array(tvs, dtype=np.float32)
@@ -206,10 +206,30 @@ def ToneMap(c, limit):
 
 
 def LinearToSrgb(c):
-    print("Check", np.any(c<0))
-    print("Check2", np.any(np.isnan(c)))
+    #print("Check", np.any(c<0))
+    #print("Check2", np.any(np.isnan(c)))
     kInvGamma = 1.0 / 2.2
     # c2 = np.power(c[0:3], kInvGamma)
     return np.power(c, kInvGamma)
 
 
+def srgb_to_linear(value, gamma=-1):
+    if gamma == -1:
+        return np.where(
+            value <= 0.04045,
+            value / 12.92,
+            np.power((value + 0.055) / 1.055, 2.4)
+        )
+    else:
+        return np.power(value, gamma)
+
+
+def linear_to_srgb(value, gamma=-1):
+    if gamma == -1:
+        return value.where(
+            value <= 0.0031308,
+            value * 12.92,
+            1.055 * np.power(value, 1.0/2.4) - 0.055
+        )
+    else:
+        return np.power(value, gamma)

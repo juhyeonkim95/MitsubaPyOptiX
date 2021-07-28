@@ -4,8 +4,8 @@ using namespace optix;
 enum DistributionEnum
 {
     Beckmann = 0,
-    Phong = 1,
-    GGX = 2
+    GGX = 1,
+    Phong = 2
 };
 
 namespace microfacet

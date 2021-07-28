@@ -148,7 +148,7 @@ class SpatialAdaptiveBinaryTree:
             if self.is_leaf(node):
                 visited_count = self.visit_count_array[node]
                 do_split = (visited_count > threshold) if threshold > 0 else False
-                do_split = do_split or (invalid_rates[node] > invalid_rate_threshold)
+                # do_split = do_split or (invalid_rates[node] > invalid_rate_threshold)
                 if do_split:
                     self.subdivide(node)
 
@@ -209,7 +209,7 @@ class SpatialAdaptiveBinaryTree:
         context["stree_visit_count"] = Buffer.from_array(self.visit_count_array, buffer_type='io', drop_last_dim=False)
         context['stree_size'] = Buffer.from_array(np.array([self.size, 0], dtype=np.uint32), buffer_type='io', drop_last_dim=False)
 
-    def visualize(self, invalid_rates=None, counts=None):
+    def visualize(self, invalid_rates=None):
         boxes = []
         for i in range(self.size):
             if i == 0:
@@ -242,21 +242,17 @@ class SpatialAdaptiveBinaryTree:
             if self.is_leaf(i):
                 points.append((boxes[i].s + boxes[i].e) * 0.5)
 
-                invalid_rate = invalid_rates[i]
-                max_rate = 1.0
-                min_rate = 0.0
-                invalid_rate = (invalid_rate - min_rate) / (max_rate - min_rate)
-                invalid_rate = np.clip(invalid_rate, 0, 1)
-                color = red * invalid_rate + green * (1-invalid_rate)
-
+                if invalid_rates is not None:
+                    invalid_rate = invalid_rates[i]
+                    max_rate = 1.0
+                    min_rate = 0.0
+                    invalid_rate = (invalid_rate - min_rate) / (max_rate - min_rate)
+                    invalid_rate = np.clip(invalid_rate, 0, 1)
+                    color = red * invalid_rate + green * (1-invalid_rate)
+                else:
+                    color = red
                 colors.append(color)
-                scale = counts[i] / np.max(counts) * 30
-                #max_count = np.max(counts[1:-1])
-                #if max_count > 0:
-                #    scale = counts[i] / max_count * 30
-                #else:
-                #   scale = 30
-
+                scale = self.visit_count_array[i] / np.max(self.visit_count_array) * 30
                 scales.append(scale)
 
                 #scatter_cube(ax, boxes[i].s, boxes[i].e)

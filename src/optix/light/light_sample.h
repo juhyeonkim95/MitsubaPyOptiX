@@ -2,11 +2,13 @@
 #include "optix/common/helpers.h"
 #include "optix/common/sampling.h"
 #include "optix/common/rt_function.h"
+#include "optix/common/random.h"
+
 using namespace optix;
 
 
 
-RT_FUNCTION void sample_light_area_sphere(const float3& p, LightParameter &light, unsigned int &seed, AreaSample &sample)
+RT_FUNCTION void sample_light_area_sphere(const float3& p, const LightParameter &light, unsigned int &seed, AreaSample &sample)
 {
 	const float r1 = rnd(seed);
 	const float r2 = rnd(seed);
@@ -26,7 +28,7 @@ RT_FUNCTION void sample_light_area_sphere(const float3& p, LightParameter &light
 	sample.pdf = pdf;
 }
 
-RT_FUNCTION void sample_light_area_quad(LightParameter &light, unsigned int &seed, AreaSample &sample)
+RT_FUNCTION void sample_light_area_quad(const LightParameter &light, unsigned int &seed, AreaSample &sample)
 {
 	const float r1 = rnd(seed);
 	const float r2 = rnd(seed);
@@ -35,7 +37,7 @@ RT_FUNCTION void sample_light_area_quad(LightParameter &light, unsigned int &see
 	sample.pdf = 1 / light.area;
 }
 
-RT_FUNCTION void sample_light_area_triangle_mesh(LightParameter &light, unsigned int &seed, AreaSample &sample)
+RT_FUNCTION void sample_light_area_triangle_mesh(const LightParameter &light, unsigned int &seed, AreaSample &sample)
 {
     int tri_index = optix::clamp(static_cast<int>(floorf(rnd(seed) * light.n_triangles)), 0, light.n_triangles - 1);
     const int3 v_idx = light.indices_buffer_id[tri_index];
@@ -66,7 +68,7 @@ RT_FUNCTION void sample_light_area_triangle_mesh(LightParameter &light, unsigned
 	sample.pdf = 1 / area * (1.0 / light.n_triangles);
 }
 
-RT_FUNCTION void sample_light_area_disk(LightParameter &light, unsigned int &seed, AreaSample &sample)
+RT_FUNCTION void sample_light_area_disk(const LightParameter &light, unsigned int &seed, AreaSample &sample)
 {
 	const float2 u = make_float2(rnd(seed), rnd(seed));
 	float2 r_theta = square_to_disk(u);
@@ -80,29 +82,23 @@ RT_FUNCTION void sample_light_area_disk(LightParameter &light, unsigned int &see
 	sample.pdf = 1 / light.area;
 }
 
-RT_FUNCTION void sample_light_area(const float3 &pos, LightParameter &light, unsigned int &seed, LightSample &sample)
+RT_FUNCTION void sample_light_area(const float3 &pos, const LightParameter &light, unsigned int &seed, LightSample &sample)
 {
     AreaSample areaSample;
-    if(light.lightType == LIGHT_QUAD){
-        sample_light_area_quad(light, seed, areaSample);
-    } else if (light.lightType == LIGHT_SPHERE){
-        sample_light_area_sphere(pos, light, seed, areaSample);
-    } else if (light.lightType == LIGHT_DISK){
-        sample_light_area_disk(light, seed, areaSample);
-    } else if (light.lightType == LIGHT_TRIANGLE_MESH){
-        sample_light_area_triangle_mesh(light, seed, areaSample);
+    switch(light.lightType){
+        case LIGHT_QUAD:sample_light_area_quad(light, seed, areaSample);break;
+        case LIGHT_SPHERE:sample_light_area_sphere(pos, light, seed, areaSample);break;
+        case LIGHT_DISK:sample_light_area_disk(light, seed, areaSample);break;
+        case LIGHT_TRIANGLE_MESH:sample_light_area_triangle_mesh(light, seed, areaSample);break;
     }
 
-    float3 surfacePos = areaSample.position;
-    float3 surfaceNormal = areaSample.normal;
-
-    float3 lightDir = surfacePos - pos;
+    float3 lightDir = areaSample.position - pos;
     float lightDist = length(lightDir);
 	float lightDistSq = lightDist * lightDist;
     lightDir /= lightDist;
 
     float lightAreaPdf = areaSample.pdf;
-    float NdotL = dot(surfaceNormal, -lightDir);
+    float NdotL = dot(areaSample.normal, -lightDir);
 
     if(NdotL <= 0.0f){
         sample.Li = make_float3(0.0);
@@ -118,7 +114,7 @@ RT_FUNCTION void sample_light_area(const float3 &pos, LightParameter &light, uns
     sample.lightDist = lightDist;
 }
 
-RT_CALLABLE_PROGRAM void sample_light_point(const float3 &pos, LightParameter &light, unsigned int &seed, LightSample &sample)
+RT_CALLABLE_PROGRAM void sample_light_point(const float3 &pos, const LightParameter &light, unsigned int &seed, LightSample &sample)
 {
     float3 lightDir = light.position - pos;
     float lightDist = length(lightDir);
@@ -130,7 +126,7 @@ RT_CALLABLE_PROGRAM void sample_light_point(const float3 &pos, LightParameter &l
     sample.lightDist = lightDist;
 }
 
-RT_CALLABLE_PROGRAM void sample_light_spot(const float3 &pos, LightParameter &light, unsigned int &seed, LightSample &sample)
+RT_CALLABLE_PROGRAM void sample_light_spot(const float3 &pos, const LightParameter &light, unsigned int &seed, LightSample &sample)
 {
     float3 lightDir = light.position - pos;
     float lightDist = length(lightDir);
@@ -158,7 +154,7 @@ RT_CALLABLE_PROGRAM void sample_light_spot(const float3 &pos, LightParameter &li
     sample.lightDist = lightDist;
 }
 
-RT_CALLABLE_PROGRAM void sample_light_direction(const float3 &pos, LightParameter &light, unsigned int &seed, LightSample &sample)
+RT_CALLABLE_PROGRAM void sample_light_direction(const float3 &pos, const LightParameter &light, unsigned int &seed, LightSample &sample)
 {
     sample.Li = light.emission;
     sample.wi = light.direction;
@@ -166,19 +162,19 @@ RT_CALLABLE_PROGRAM void sample_light_direction(const float3 &pos, LightParamete
     sample.lightDist = 9999; // big number
 }
 
-RT_CALLABLE_PROGRAM void sample_light(const float3 &pos, LightParameter &light, unsigned int &seed, LightSample &sample)
+RT_CALLABLE_PROGRAM void sample_light(const float3 &pos, const LightParameter &light, unsigned int &seed, LightSample &sample)
 {
-    if (light.lightType == LIGHT_POINT){
-        sample_light_point(pos, light, seed, sample);
-    } else if (light.lightType == LIGHT_DIRECTIONAL){
-        sample_light_direction(pos, light, seed, sample);
-    } else if (light.lightType == LIGHT_QUAD ||
+    if (light.lightType == LIGHT_QUAD ||
                light.lightType == LIGHT_SPHERE ||
                light.lightType == LIGHT_DISK ||
                light.lightType == LIGHT_TRIANGLE_MESH
-               ){
+    ){
         sample_light_area(pos, light, seed, sample);
     } else if (light.lightType == LIGHT_SPOT){
         sample_light_spot(pos, light, seed, sample);
+    } else if (light.lightType == LIGHT_POINT){
+        sample_light_point(pos, light, seed, sample);
+    } else if (light.lightType == LIGHT_DIRECTIONAL){
+        sample_light_direction(pos, light, seed, sample);
     }
 }

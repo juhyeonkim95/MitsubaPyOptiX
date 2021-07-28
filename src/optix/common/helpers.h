@@ -231,13 +231,13 @@ __device__ inline float4 LinearToSrgb(const float4& c)
 	return make_float4(powf(c.x, kInvGamma), powf(c.y, kInvGamma), powf(c.z, kInvGamma), c.w);
 }
 
-__device__ float3 transform_point(Matrix4x4 &transformation, float3 v) {
+RT_FUNCTION float3 transform_point(const Matrix4x4 &transformation, float3 v) {
 	float4 a = make_float4(v.x, v.y, v.z, 1);
     a = transformation * a;
     return make_float3(a.x, a.y, a.z);
 }
 
-__device__ float3 transform_normal(Matrix4x4 &transformation, float3 v) {
+RT_FUNCTION float3 transform_normal(const Matrix4x4 &transformation, float3 v) {
     float4 a = make_float4(v.x, v.y, v.z, 0);
     a = transformation * a;
     return normalize(make_float3(a.x, a.y, a.z));

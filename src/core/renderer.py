@@ -10,6 +10,9 @@ from path_guiding.quadtree import *
 from core.renderer_constants import *
 from path_guiding.radiance_record import QTable
 #from path_guiding.qTable import QTable
+from utils.logging_utils import *
+from utils.timing_utils import timing
+import gc
 
 
 class Renderer:
@@ -27,19 +30,22 @@ class Renderer:
 
         self.scene_epsilon = 1e-3
         self.scale = scale
-        self.force_all_diffuse=force_all_diffuse
+        self.force_all_diffuse = force_all_diffuse
         self.reference_image = None
         self.scene_octree = None
 
-    def create_context(self):
+        self.compile_config = {}
+
+    @timing
+    def init_optix_context(self):
         if self.context is None:
             context = Context()
         else:
             context = self.context
 
         context.set_ray_type_count(2)
-        context.set_entry_point_count(3)
-        context.set_stack_size(2000)
+        context.set_entry_point_count(2)
+        context.set_stack_size(8000)
         # context.set_devices([0,1,2,3,4])
         # print("Device Name", context.get_device_name(0))
 
@@ -61,6 +67,7 @@ class Renderer:
         # print("get_used_host_memory", context.get_used_host_memory())
         # print("get_available_device_memory", context.get_available_device_memory(0))
 
+    @timing
     def init_entry_point(self, has_envmap):
         if has_envmap:
             miss_program = self.program_dictionary["miss_envmap"]
@@ -72,7 +79,7 @@ class Renderer:
         self.context.set_miss_program(0, miss_program)
 
         self.context.set_ray_generation_program(1, self.program_dictionary["quad_tree_updater"])
-        self.context.set_ray_generation_program(2, self.program_dictionary["binary_tree_updater"])
+        # self.context.set_ray_generation_program(2, self.program_dictionary["binary_tree_updater"])
 
         # self.context.set_ray_generation_program(1, self.program_dictionary['quad_tree_updater'])
         # self.entry_point = EntryPoint(self.program_dictionary['ray_generation'],
@@ -80,7 +87,34 @@ class Renderer:
         #                          miss_program)
         # self.quad_tree_updater_entry_point = EntryPoint()
 
-    def init_programs(self):
+    def update_compile_config(self, use_nee, sampling_strategy):
+        updated = False
+        if "use_nee" not in self.compile_config or self.compile_config["use_nee"] != use_nee:
+            updated = True
+            self.compile_config["use_nee"] = use_nee
+        if "sampling_strategy" not in self.compile_config or self.compile_config["sampling_strategy"] != sampling_strategy:
+            updated = True
+            self.compile_config["sampling_strategy"] = sampling_strategy
+        if updated:
+            self.edit_compile_config(use_nee, sampling_strategy)
+        return updated
+
+    def edit_compile_config(self, use_nee, sampling_strategy):
+        with open("optix/app_config.h", 'w') as f:
+            lines = [
+                "#ifndef APP_CONFIG_H",
+                "#define APP_CONFIG_H",
+                "#define USE_NEXT_EVENT_ESTIMATION %d" % (1 if use_nee else 0),
+                "",
+                "#define SAMPLING_STRATEGY_BSDF %d" % SAMPLE_COSINE,
+                "#define SAMPLING_STRATEGY_SD_TREE %d" % SAMPLE_Q_QUADTREE,
+                "#define SAMPLING_STRATEGY %d" % sampling_strategy,
+                "#endif"
+            ]
+            f.write('\n'.join(lines))
+
+    @timing
+    def init_optix_programs(self):
         #Compiler.clean()
         #Compiler.keep_device_function = False
 
@@ -103,6 +137,8 @@ class Renderer:
         program_dictionary["sphere_it"] = Program('optix/shapes/sphere.cu', 'robust_intersect')
         program_dictionary["disk_bb"] = Program('optix/shapes/disk.cu', 'bounds')
         program_dictionary["disk_it"] = Program('optix/shapes/disk.cu', 'intersect')
+        program_dictionary["box_bb"] = Program('optix/shapes/box.cu', 'box_bounds')
+        program_dictionary["box_it"] = Program('optix/shapes/box.cu', 'box_intersect')
 
         # Materials
         closest_hit_program = 'optix/integrators/hit_program.cu'
@@ -120,10 +156,11 @@ class Renderer:
 
         self.program_dictionary = program_dictionary
 
-    def init_materials(self):
+    @timing
+    def init_material_program_dict(self):
         material_dict = {}
         program_dictionary = self.program_dictionary
-        print(program_dictionary)
+
         opaque_material = Material()
         opaque_material.set_closest_hit_program(0, program_dictionary["closest_hit"])
         opaque_material.set_any_hit_program(1, program_dictionary["any_hit_shadow"])
@@ -142,12 +179,16 @@ class Renderer:
         material_dict['light_material'] = light_material
         self.material_dict = material_dict
 
-    def init_scene(self):
+    @timing
+    def init_optix_scene(self):
         scene = self.scene
         context = self.context
 
-        scene.optix_load_images()
+        # (1) load texture data to optix and retrieve optix texture ids
+        scene.optix_load_textures()
+        # (2) load OBJ mesh data to optix and retrieve optix buffer ids
         scene.optix_create_objs(self.program_dictionary)
+
         scene.optix_create_geometry_instances(self.program_dictionary, self.material_dict, self.force_all_diffuse)
         create_geometry(context, scene)
         create_scene_lights(context, scene)
@@ -160,33 +201,18 @@ class Renderer:
         self.context["spherical_cam_directional_mapping"] = np.array(map_type, dtype=np.uint32)
         self.context["camera_type"] = np.array(1, dtype=np.uint32)
 
+    @timing
     def init_camera(self):
-        camera = self.scene.camera
-        context = self.context
-        fov = camera.fov
         aspect_ratio = float(self.width) / float(self.height)
-        fovx = (camera.fov_axis == 'x')
+        camera = self.scene.camera
+        u, v, w = camera.calc_image_space_vectors(aspect_ratio)
 
-        # calculate camera variables
-        W = np.array(camera.w)
-        U = np.array(camera.u)
-        V = np.array(camera.v)
-        wlen = np.sqrt(np.sum(W ** 2))
-        if fovx:
-            ulen = wlen * math.tan(0.5 * fov * math.pi / 180)
-            U *= ulen
-            vlen = ulen / aspect_ratio
-            V *= vlen
-        else:
-            vlen = wlen * math.tan(0.5 * fov * math.pi / 180)
-            V *= vlen
-            ulen = vlen * aspect_ratio
-            U *= ulen
-
-        context["eye"] = camera.eye
-        context["U"] = U
-        context["V"] = V
-        context["W"] = W
+        # upload to context
+        context = self.context
+        context["eye"] = np.array(camera.eye, dtype=np.float32)
+        context["U"] = np.array(u, dtype=np.float32)
+        context["V"] = np.array(v, dtype=np.float32)
+        context["W"] = np.array(w, dtype=np.float32)
         context["focalDistance"] = np.array(5, dtype=np.float32)
         # context["apertureRadius"] = np.array(0.5, dtype=np.float32)
         context["camera_type"] = np.array(0, dtype=np.uint32)
@@ -198,13 +224,15 @@ class Renderer:
         self.width = self.scene.width // self.scale
         self.height = self.scene.height // self.scale
 
-    def init_optix(self, scene_name):
-        self.create_context()
-        self.init_programs()
+    @timing
+    def init_optix(self):
+        optix_logger = load_logger("optix")
+        self.init_optix_context()
+        self.init_optix_programs()
         self.init_entry_point(self.scene.has_envmap)
 
-        self.init_materials()
-        self.init_scene()
+        self.init_material_program_dict()
+        self.init_optix_scene()
         self.init_camera()
 
     def prepare_scene(self, scene_name):
@@ -219,68 +247,6 @@ class Renderer:
         context['scatter_type_buffer'] = Buffer.empty((height, width, 2), dtype=np.float32, buffer_type='o', drop_last_dim=True)
         context['output_buffer'] = Buffer.empty((height, width, 4), dtype=np.float32, buffer_type='o', drop_last_dim=True)
         context['output_buffer2'] = Buffer.empty((height, width, 4), dtype=np.float32, buffer_type='o',  drop_last_dim=True)
-
-    def construct_stree(
-            self,
-            scene_name="cornell-box",
-            max_path_depth=2,
-            max_octree_depth=3,
-            visualize=False
-    ):
-
-        self.scene_epsilon = 1e-3 if scene_name == "veach_door_simple" else 1e-5
-
-        if self.scene_name != scene_name:
-            self.scene_name = scene_name
-            self.init_scene_config(scene_name)
-            self.init_optix(scene_name)
-        else:
-            print("Skipped because already prepared")
-
-        context = self.context
-        scene = self.scene
-        width = self.width
-        height = self.height
-
-        context['rr_begin_depth'] = np.array(max_path_depth, dtype=np.uint32)
-        context['max_depth'] = np.array(max_path_depth, dtype=np.uint32)
-        context["sample_type"] = np.array(SAMPLE_COSINE, dtype=np.uint32)
-        context["use_mis"] = np.array(0, dtype=np.uint32)
-        context["samples_per_pass"] = np.array(1, dtype=np.uint32)
-        context['construct_stree'] = np.array(1, dtype=np.uint32)
-        context['point_buffer'] = Buffer.empty((max_path_depth, height, width, 3), dtype=np.float32, buffer_type='o', drop_last_dim=True)
-        QTable.register_empty_context(context)
-        self.register_context_related()
-
-        # create_q_table_related(context, scene.bbox.bbox_max, height, width, self.n_cube, self.uv_n, self.scene_octree)
-        context.validate()
-        context.compile()
-        context.launch(0, width, height, 1)
-
-        #self.entry_point.launch((self.width, self.height, 1), context)
-        pos_buffer = context['point_buffer'].to_array()
-        print(pos_buffer.shape)
-        xyz = pos_buffer.reshape((width * height * max_path_depth, 3))
-        xyz = (xyz - scene.bbox.bbox_min) / (scene.bbox.bbox_max - scene.bbox.bbox_min)
-
-        #tree = ot.PyOctree(xyz)
-
-        start_time = time.time()
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(xyz)
-        octree = o3d.geometry.Octree(max_depth=max_octree_depth)
-        octree.convert_from_point_cloud(pcd)
-        #octree.traverse(f_traverse)
-
-        print("Octree build _time", time.time() - start_time)
-        print(octree.locate_leaf_node(pcd.points[0]))
-        #o3d.visualization.draw_geometries([pcd], mesh_show_wireframe=False)
-        if visualize:
-            o3d.visualization.draw_geometries([octree], mesh_show_wireframe=True)
-        index_array = octree_to_index_array(octree)
-        #index_array = [1] * (1 + 8 + 64) + [0] * (8 * 64)
-        #index_array = np.array(index_array, dtype=np.uint32)
-        self.scene_octree = Octree(index_array)
 
     def render(
             self,
@@ -332,13 +298,19 @@ class Renderer:
             **kwargs
     ):
         self.scene_epsilon = 1e-3 if scene_name == "veach_door_simple" else 1e-5
+
         is_budget_time = (time_limit_in_sec > 0)
         start_time = time.time()
 
+        #config_updated = self.update_compile_config(use_nee=use_mis, sampling_strategy=sample_type)
+
         if self.scene_name != scene_name:
+            del self.context
+            gc.collect()
+            self.context = None
             self.scene_name = scene_name
             self.init_scene_config(scene_name)
-            self.init_optix(scene_name)
+            self.init_optix()
             print("Optix program Prepare Time:", str(timedelta(seconds=time.time() - start_time)))
         else:
             print("Skipped because already prepared")
@@ -368,7 +340,7 @@ class Renderer:
         context['rr_begin_depth'] = np.array(rr_begin_depth, dtype=np.uint32)
         context['max_depth'] = np.array(max_depth, dtype=np.uint32)
         context["sample_type"] = np.array(sample_type, dtype=np.uint32)
-        context["use_mis"] = np.array(1 if use_mis else 0, dtype=np.uint32)
+        context["use_mis"] = np.array(1 if use_mis and not scene.has_envmap else 0, dtype=np.uint32)
         context["use_tone_mapping"] = np.array(1 if use_tone_mapping else 0, dtype=np.uint32)
         context["use_soft_q_update"] = np.array(1 if use_soft_q_update else 0, dtype=np.uint32)
         context["save_q_cos"] = np.array(1 if save_q_cos else 0, dtype=np.uint32)
@@ -408,21 +380,8 @@ class Renderer:
                 accumulative_q_table_update=accumulative_q_table_update,
                 n_cube=n_cube, n_uv=uv_n, octree=self.scene_octree
             )
-            # q_table = QTable(n_cube=n_cube, n_uv=uv_n, spatial_type=spatial_type,  directional_type=directional_type,
-            #                  directional_mapping_method=directional_mapping_method,
-            #                  accumulative_q_table_update=accumulative_q_table_update,
-            #                  octree=self.scene_octree)
             q_table.register_to_context(context)
 
-        #n_a = self.uv_n * self.uv_n * 2
-        #q_table = np.zeros((n_a, n_s), dtype=np.float32)
-        #equal_table = np.zeros((n_a, n_s), dtype=np.float32)
-        #equal_table.fill(1 / n_a)
-
-        # initial samples
-        # if learning_method == "exponential":
-        #     current_samples_per_pass = 4
-        # else:
         current_samples_per_pass = samples_per_pass
         if samples_per_pass == -1:
             current_samples_per_pass = spp
@@ -454,6 +413,10 @@ class Renderer:
         exponential_update_size = 4
         if q_table:
             zeros_n_s_n_a = np.zeros((q_table.n_s, q_table.n_a), dtype=np.float32)
+
+        # from core.utils.windows_utils import ImageWindowBase
+        # window = ImageWindowBase(context, width, height)
+        # window.run()
 
         while True:
             if is_budget_time:
@@ -490,20 +453,22 @@ class Renderer:
 
             context["frame_number"] = np.array((completed_samples + 1), dtype=np.uint32)
 
+
+
             # Run OptiX program
             ith_start_time = time.time()
             if is_first:
                 if use_brdf_first_force:
-                    context['is_first_pass'] = np.array(1, dtype=np.uint32)
+                    context['bsdf_sampling_fraction'] = np.array(1, dtype=np.float32)
                 else:
-                    context['is_first_pass'] = np.array(0, dtype=np.uint32)
+                    context['bsdf_sampling_fraction'] = np.array(0, dtype=np.float32)
                 # self.entry_point.launch((width, height, b), context)
                 context.validate()
                 context.compile()
                 context.launch(0, width, height, b)
                 is_first = False
             else:
-                context['is_first_pass'] = np.array(0, dtype=np.uint32)
+                context['bsdf_sampling_fraction'] = np.array(bsdf_sampling_fraction, dtype=np.float32)
                 context.launch(0, width, height, b)
 
             # context.launch(1, width, height)
@@ -621,23 +586,11 @@ class Renderer:
             ldr_image = LinearToSrgb(ToneMap(hdr_image, 1.5))
         else:
             ldr_image = hdr_image
+        A = np.max(ldr_image)
+        B = np.min(ldr_image)
 
-        total_path_length_sum = np.sum(context['path_length_buffer'].to_array())
-        valid_sample_count = context['scatter_type_buffer'].to_array()
-
-        valid = valid_sample_count[:, :, 0]
-        invalid = valid_sample_count[:, :, 1]
-        invalid_rate = invalid / (valid + invalid + 1e-6)
-        print("Invalid mean", np.mean(invalid_rate))
-        invalid_rate = np.flipud(invalid_rate)
-        fig = plt.figure()
-        plt.imshow(invalid_rate, vmin=0, vmax=0.5)
-        plt.show()
-
-        # total_q_scatter_rate = total_q_scatter_sum / (total_q_scatter_sum + total_brdf_scatter_sum)
-        # total_q_scatter_img = scatter_type[:, :, 1] / (1e-6 + scatter_type[:, :, 0] + scatter_type[:, :, 1])
-        # total_q_scatter_img = np.flipud(total_q_scatter_img)
-        # print("Q scatter rate", total_q_scatter_rate)
+        print("Image max", A)
+        print("Image min", B)
 
         elapsed_time = end_time - start_time
         elapsed_time_optix_core = float(np.sum(np.asarray(elapsed_times)))
@@ -659,8 +612,6 @@ class Renderer:
         if show_picture:
             plt.imshow(ldr_image)
             plt.show()
-            #plt.imshow(total_q_scatter_img)
-            #plt.show()
 
         results = dict()
 

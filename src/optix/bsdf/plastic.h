@@ -30,21 +30,28 @@ rtDeclareVariable(bool, m_nonlinear, , );
 
 namespace plastic
 {
-RT_CALLABLE_PROGRAM BSDFSample3f Sample(const MaterialParameter &mat, const float3 &wi, unsigned int &seed)
+__device__ uint32_t flags = BSDFFlags::DeltaReflection | BSDFFlags::DiffuseReflection | BSDFFlags::FrontSide;
+
+RT_CALLABLE_PROGRAM void Sample(
+    const MaterialParameter &mat, const SurfaceInteraction &si,
+    unsigned int &seed, BSDFSample3f &bs
+)
 {
-    BSDFSample3f bs;
+    const float3 &wi = si.wi;
+
     if(wi.z < 0){
         bs.pdf = 1.0;
         bs.weight = make_float3(0.0);
-        return bs;
+        return;
     }
 
+    float3 diffuse_reflectance = eval_diffuse_reflectance(mat, si);
     float ior = mat.intIOR / mat.extIOR;
     float eta = 1 / ior;
-    float Fi = fresnel::DielectricReflectance( eta, wi.z);
+    float Fi = fresnel::DielectricReflectance(eta, wi.z);
 
     float s_mean = 1.0f;
-    float d_mean = (mat.albedo.x + mat.albedo.x + mat.albedo.z) / 3.0f;
+    float d_mean = (diffuse_reflectance.x + diffuse_reflectance.y + diffuse_reflectance.z) / 3.0f;
     float m_specular_sampling_weight = s_mean / (d_mean + s_mean);
 
 
@@ -73,7 +80,7 @@ RT_CALLABLE_PROGRAM BSDFSample3f Sample(const MaterialParameter &mat, const floa
 	    cosine_sample_hemisphere(rnd(seed), rnd(seed), bs.wo);
         float Fo = fresnel::DielectricReflectance(eta, bs.wo.z);
 
-        float3 value = mat.albedo;
+        float3 value = diffuse_reflectance;
         // value = value / 1 - (value * m_fdr_int);
         value = value / (1 - (mat.nonlinear ? value * m_fdr_int : make_float3(m_fdr_int)));
         value *= ((1.0f - Fi)*(1.0f - Fo)*eta*eta);
@@ -83,15 +90,15 @@ RT_CALLABLE_PROGRAM BSDFSample3f Sample(const MaterialParameter &mat, const floa
         bs.weight = value;
         bs.sampledLobe = BSDFLobe::DiffuseReflectionLobe;
 	}
-    return bs;
+    return;
 }
 
-RT_CALLABLE_PROGRAM float3 Eval(const MaterialParameter &mat, const float3 &wi, const float3 &wo)
+RT_CALLABLE_PROGRAM float3 Eval(const MaterialParameter &mat, const SurfaceInteraction &si, const float3 &wo)
 {
     return make_float3(0.0f);
 }
 
-RT_CALLABLE_PROGRAM float Pdf(const MaterialParameter &mat, const float3 &wi, const float3 &wo){
+RT_CALLABLE_PROGRAM float Pdf(const MaterialParameter &mat, const SurfaceInteraction &si, const float3 &wo){
     return 0.0f;
 }
 }

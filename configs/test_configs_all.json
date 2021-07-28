@@ -13,7 +13,7 @@
     "staircase2",
     "veach-ajar"
   ],
-  "available_gpu_ids": [0,1,2,3,4,5,6,7],
+  "available_gpu_ids": [0,3,6],
   "config_list": [
     {"sample_type": "brdf"},
     {"sample_type": "q_brdf_inv", "q_table_update_method": "sarsa"},

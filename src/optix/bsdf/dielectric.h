@@ -23,46 +23,51 @@
 #include "optix/bsdf/fresnel.h"
 #include "optix/bsdf/bsdf_sample.h"
 #include "optix/common/helpers.h"
+#include "optix/utils/material_value_loader.h"
 
 using namespace optix;
-// rtDeclareVariable(float, t_hit, rtIntersectionDistance, );
 
 namespace dielectric
 {
-RT_CALLABLE_PROGRAM BSDFSample3f Sample(const MaterialParameter &mat, const float3 &wi, unsigned int &seed)
+__device__ uint32_t flags = BSDFFlags::DeltaReflection | BSDFFlags::DeltaTransmission | BSDFFlags::FrontSide | BSDFFlags::BackSide | BSDFFlags::NonSymmetric;
+
+RT_CALLABLE_PROGRAM void Sample(
+    const MaterialParameter &mat, const SurfaceInteraction &si,
+    unsigned int &seed, BSDFSample3f &bs
+)
 {
-    BSDFSample3f bs;
 
     float ior = mat.intIOR / mat.extIOR;
-    float eta = wi.z < 0.0f ? ior : 1 / ior;
+    float eta = si.wi.z < 0.0f ? ior : 1 / ior;
     float cos_theta_t;
-    const float F = fresnel::DielectricReflectance( eta, abs(wi.z), cos_theta_t );
+    const float F = fresnel::DielectricReflectance( eta, abs(si.wi.z), cos_theta_t );
 
 	if( rnd(seed) <= F )
 	{
 		// Reflect
-		bs.wo = make_float3(-wi.x, -wi.y, wi.z);
+		bs.wo = make_float3(-si.wi.x, -si.wi.y, si.wi.z);
 		bs.pdf = F;
-		bs.weight = mat.albedo;
+		bs.weight = eval_specular_reflectance(mat, si);
 		bs.sampledLobe = BSDFLobe::SpecularReflectionLobe;
 	}
 	else
 	{
 	    // Refract
-	    bs.wo = make_float3(-wi.x * eta, -wi.y * eta, -copysignf(cos_theta_t, wi.z));
+	    bs.wo = make_float3(-si.wi.x * eta, -si.wi.y * eta, -copysignf(cos_theta_t, si.wi.z));
 	    bs.pdf = 1 - F;
-	    bs.weight = mat.albedo * sqr(eta);
+	    bs.weight = eval_specular_transmittance(mat, si) * sqr(eta);
 	    bs.sampledLobe = BSDFLobe::SpecularTransmissionLobe;
 	}
-    return bs;
+    return;
 }
 
-RT_CALLABLE_PROGRAM float3 Eval(const MaterialParameter &mat, const float3 &wi, const float3 &wo)
+RT_CALLABLE_PROGRAM float3 Eval(const MaterialParameter &mat, const SurfaceInteraction &si, const float3 &wo)
 {
     return make_float3(0.0f);
 }
 
-RT_CALLABLE_PROGRAM float Pdf(const MaterialParameter &mat, const float3 &wi, const float3 &wo){
+RT_CALLABLE_PROGRAM float Pdf(const MaterialParameter &mat, const SurfaceInteraction &si, const float3 &wo)
+{
     return 0.0f;
 }
 }

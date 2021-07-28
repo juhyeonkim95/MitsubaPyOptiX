@@ -1,11 +1,3 @@
-# def render_single_using_multiprocessing(x):
-#     kwargs, scale, gpu_id = x
-#     renderer = Renderer(scale=scale)
-#
-#     render_result = renderer.render(**kwargs)
-#     return render_result
-
-
 import multiprocessing
 from multiprocessing import Queue, Lock, Process
 from core.renderer_constants import *
@@ -18,19 +10,6 @@ from collections import OrderedDict
 
 renderers = {}
 
-
-# def create_renderers(gpu_ids, scale):
-#     from core.renderer import Renderer
-#     for i in gpu_ids:
-#         print("Context Created")
-#         os.environ["CUDA_VISIBLE_DEVICES"] = str(i)
-#         from pyoptix import Compiler
-#         Compiler.clean()
-#         Compiler.keep_device_function = False
-#         file_dir = os.path.dirname(os.path.abspath(__file__))
-#         Compiler.add_program_directory(file_dir)
-#         renderer = Renderer(scale=scale)
-#         renderers[i] = renderer
 
 def render_using_multiprocessing(config_file_name):
     m = MultiProcessingRenderer()
@@ -117,14 +96,20 @@ class MultiProcessingRenderer:
             if not os.path.exists(output_folder):
                 os.makedirs(output_folder)
 
-        for i in range(n_process):
-            gpu_id = self.available_gpu_list[i]
-            proc = Process(target=self.render_single_process, args=(gpu_id, queue, lock))
-            procs.append(proc)
-            proc.start()
+        # (1) More than one GPUs --> multiprocessing
+        if n_process > 1:
+            for i in range(n_process):
+                gpu_id = self.available_gpu_list[i]
+                proc = Process(target=self.render_single_process, args=(gpu_id, queue, lock))
+                procs.append(proc)
+                proc.start()
 
-        for proc in procs:
-            proc.join()
+            for proc in procs:
+                proc.join()
+
+        # (2) only one GPU --> no multiprocessing
+        else:
+            self.render_single_process(self.available_gpu_list[0], queue, lock)
 
         # export final result over scenes
         if "output_folder" in self.json_config:
@@ -155,6 +140,7 @@ class MultiProcessingRenderer:
 
             scene_name = self.scene_list[scene_id]
             config = self.config_list[config_id]
+
             config_name = self.config_name_list[config_id]
 
             final_config = {**self.common_configs, **config}
@@ -206,8 +192,6 @@ def process_configs(config):
         config["sample_type"] = sample_type_dict[config["sample_type"]]
     if config.get("q_table_update_method") is not None:
         config["q_table_update_method"] = q_table_update_method_dict[config["q_table_update_method"]]
-    #if config.get("sample_type") == "q_mis_quadtree":
-    #
     return config
 
 
@@ -230,7 +214,9 @@ def export_total_results(total_results, scene_output_folder):
     export_list_type("elapsed_times")
     export_list_type("hit_count_sequence")
 
-    df.drop(["image", "elapsed_times", "hit_count_sequence", "q_table_info"], inplace=True)
+    df.drop(["image", "elapsed_times", "hit_count_sequence"], inplace=True)
+    if "q_table_info" in df:
+        df.drop(["q_table_info"], inplace=True)
     df.to_csv("%s/result.csv" % scene_output_folder)
 
     # export json

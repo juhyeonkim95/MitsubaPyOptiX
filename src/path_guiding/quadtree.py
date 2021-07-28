@@ -124,6 +124,10 @@ class DTree:
         print("Select array", self.select_array[0:self.current_size])
 
     def update(self, threshold=0.01):
+        # if self.uuid == 188:
+        #     print("Before")
+        #     self.print()
+
         if self.current_size == self.max_length:
             return
 

@@ -61,16 +61,6 @@ rtDeclareVariable(int, hitTriIdx,  attribute hitTriIdx, );
 rtDeclareVariable(optix::Ray, ray, rtCurrentRay, );
 rtDeclareVariable(int,  faceNormals, , );
 
-//RT_CALLABLE_PROGRAM float3 get_transformed_buffer(float3 v, bool isNormal) {
-//	if(isNormal){
-//	    float4 a = make_float4(v.x, v.y, v.z, 0);
-//	    a = transformation * a;
-//	    return normalize(make_float3(a.x, a.y, a.z));
-//	}
-//	float4 a = make_float4(v.x, v.y, v.z, 1);
-//    a = transformation * a;
-//    return make_float3(a.x, a.y, a.z);
-//}
 
 template<bool DO_REFINE>
 static __device__
@@ -78,9 +68,6 @@ void meshIntersect( int primIdx )
 {
   const int3 v_idx = index_buffer[primIdx];
 
-//  const float3 p0 = get_transformed_buffer(vertex_buffer[ v_idx.x ], false);
-//  const float3 p1 = get_transformed_buffer(vertex_buffer[ v_idx.y ], false);
-//  const float3 p2 = get_transformed_buffer(vertex_buffer[ v_idx.z ], false);
   const float3 p0 = vertex_buffer[ v_idx.x ];
   const float3 p1 = vertex_buffer[ v_idx.y ];
   const float3 p2 = vertex_buffer[ v_idx.z ];
@@ -93,7 +80,7 @@ void meshIntersect( int primIdx )
     if(  rtPotentialIntersection( t ) ) {
       hitTriIdx = primIdx;
       geometric_normal = normalize( n );
-      if( normal_buffer.size() == 0 || faceNormals==0) {
+      if( normal_buffer.size() == 0 || faceNormals==1) {
         shading_normal = geometric_normal; 
       } else {
         float3 n0 = normal_buffer[ v_idx.x ];

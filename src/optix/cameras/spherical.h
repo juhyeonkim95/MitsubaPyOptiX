@@ -1,12 +1,13 @@
 #include "optix/common/rt_function.h"
 #include "optix/common/helpers.h"
+#include "optix/common/random.h"
 
 using namespace optix;
 rtDeclareVariable(float3,        spherical_cam_position, , );
 rtDeclareVariable(float3,        spherical_cam_size, , );
 rtDeclareVariable(unsigned int,        spherical_cam_directional_mapping, , );
 
-RT_FUNCTION void generate_ray_spherical(float2 &pixel, float3 &origin, float3 &direction, unsigned int &seed)
+RT_FUNCTION void generate_ray_spherical(const float2 &pixel, float3 &origin, float3 &direction, unsigned int &seed)
 {
     float3 rayOrigin = spherical_cam_position + spherical_cam_size * make_float3(rnd(seed), rnd(seed), rnd(seed));
 

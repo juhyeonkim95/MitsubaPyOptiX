@@ -1,4 +1,5 @@
 #include "optix/common/rt_function.h"
+#include "optix/common/random.h"
 
 using namespace optix;
 rtDeclareVariable(float3,        eye, , );
@@ -8,7 +9,7 @@ rtDeclareVariable(float3,        W, , );
 rtDeclareVariable(float,        focalDistance, , );
 rtDeclareVariable(float,        apertureRadius, , );
 
-RT_FUNCTION void generate_ray_perspective(float2 &pixel, float3 &origin, float3 &direction, unsigned int &seed)
+RT_FUNCTION void generate_ray_perspective(const float2 &pixel, float3 &origin, float3 &direction, unsigned int &seed)
 {
     float3 rayOrigin = eye;
     float3 rayDirection = normalize(pixel.x*U + pixel.y*V + W);

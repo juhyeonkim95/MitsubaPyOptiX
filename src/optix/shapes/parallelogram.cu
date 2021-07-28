@@ -66,8 +66,7 @@ RT_PROGRAM void intersect(int primIdx)
 
           // added
           refine_and_offset_hitpoint( ray.origin + t*ray.direction, ray.direction,
-              n, anchor,
-              back_hit_point, front_hit_point );
+              n, anchor, back_hit_point, front_hit_point );
 
           rtReportIntersection( 0 );
         }

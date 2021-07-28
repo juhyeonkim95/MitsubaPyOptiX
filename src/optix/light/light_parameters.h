@@ -1,4 +1,4 @@
-
+#pragma once
 #include <optixu/optixu_math_namespace.h>
 #include <optixu/optixu_matrix_namespace.h>
 
@@ -26,6 +26,7 @@ struct LightParameter
 	optix::float3 v;
 	float radius;
 	float area;
+	float inv_area;
 	float cosTotalWidth;
 	float cosFalloffStart;
 	unsigned int lightType;

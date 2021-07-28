@@ -22,32 +22,7 @@
 from test_utils import *
 
 
-def make_reference_image_multiple(scene_names=None, scale=1, diffuse_only=False):
-    renderer = Renderer(scale=scale)
-    root_path = "../scene"
-    if scene_names is None:
-        scene_names = [os.path.relpath(f.path, root_path) for f in os.scandir(root_path) if f.is_dir()]
-        scene_names.sort()
-    print(scene_names)
-    diffuse_folder = "diffuse_only" if diffuse_only else "standard"
-    target_folder = '../reference_images/%s/scale_%d' % (diffuse_folder, scale)
 
-    if not os.path.exists(target_folder):
-        os.makedirs(target_folder)
-    for scene_name in scene_names:
-        common_params = {
-            'scene_name': scene_name,
-            '_spp': 4096 * 32,
-            'samples_per_pass': 128 * scale * scale,
-            'max_depth': 32,
-            'rr_begin_depth': 32,
-        }
-        try:
-            image = renderer.render(**common_params, use_mis=False)
-            file_name = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            save_pred_images(image['image'], "%s/%s_%s" % (target_folder, scene_name, file_name))
-        except Exception:
-            print("Error")
 
 
 def make_reference_image_single(scene_name, scale=4, force_all_diffuse=False):

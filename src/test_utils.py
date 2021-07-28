@@ -39,9 +39,11 @@ def test_single_scene(scene_name,
                       test_target=1,
                       do_bsdf=True,
                       visualize_octree=False):
-
-    reference_parent_folder = '../reference_images/%s/scale_%d' % ("standard", scale)
-    ref_image = load_reference_image(reference_parent_folder, scene_name)
+    try:
+        reference_parent_folder = '../reference_images/%s/scale_%d' % ("standard", scale)
+        ref_image = load_reference_image(reference_parent_folder, scene_name)
+    except Exception as e:
+        ref_image = None
 
     total_results = OrderedDict()
     renderer = Renderer(scale=scale)
@@ -49,15 +51,16 @@ def test_single_scene(scene_name,
 
     common_params = {
         'scene_name': scene_name,
-        'samples_per_pass': 8,
+        'samples_per_pass': 16,
         'show_picture': show_picture,
-        'max_depth': 16,
+        'max_depth': 8,
         'rr_begin_depth': 8,
         'scene_epsilon': 1e-5,
         # You should change q_table_old at getQValue to q_table
         'accumulative_q_table_update': True,
         'uv_n': 16,
-        'n_cube': 8
+        'n_cube': 8,
+        'use_mis': False
     }
 
     if test_time:
@@ -170,117 +173,52 @@ def test_single_scene(scene_name,
         #                                                      q_table_update_method=Q_UPDATE_MONTE_CARLO)
 
         # total_results["grid"] = renderer.render(**common_params,
-        #                                                      sample_type=SAMPLE_Q_QUADTREE,
-        #                                                      quad_tree_update_type='gpu',
-        #                                                      force_update_q_table=True,
-        #                                                      directional_mapping_method="cylindrical",
-        #                                                      directional_type="quadtree",
-        #                                                      learning_method="exponential",
-        #                                                      bsdf_sampling_fraction=0.5,
-        #                                                      q_table_update_method=Q_UPDATE_MONTE_CARLO)
-        # total_results["binary_tree"] = renderer.render(**common_params,
-        #                                                          sample_type=SAMPLE_Q_QUADTREE,
-        #                                                          quad_tree_update_type='gpu',
-        #                                                          force_update_q_table=True,
-        #                                                          directional_mapping_method="cylindrical",
-        #                                                          directional_type="quadtree",
-        #                                                          spatial_type="binary_tree",
-        #                                                          learning_method="exponential",
-        #                                                          bsdf_sampling_fraction=0.5,
-        #                                                          q_table_update_method=Q_UPDATE_MONTE_CARLO,
-        #                                                         binary_tree_split_sample_number=12000,
-        #                                                         binary_tree_split_invalid_rate_threshold=1.0)
-        add_params = {
-            "sample_type":SAMPLE_Q_QUADTREE,
-            "quad_tree_update_type": 'gpu',
-            "directional_mapping_method": "cylindrical",
-            "directional_type": "quadtree",
-            "spatial_type": "binary_tree",
-            "learning_method": "exponential",
-            "bsdf_sampling_fraction" : 0.5,
-            "q_table_update_method": Q_UPDATE_MONTE_CARLO
-        }
-        common_params2 = {**common_params, **add_params}
-        #total_results["binary_tree_mc"] = renderer.render(**common_params2, q_table_update_method=Q_UPDATE_MONTE_CARLO)
-        #total_results["binary_tree_expected_sarsa"] = renderer.render(**common_params2, q_table_update_method=Q_UPDATE_EXPECTED_SARSA)
-        #total_results["binary_tree_sarsa"] = renderer.render(**common_params2, q_table_update_method=Q_UPDATE_SARSA)
-
-        N = 10
-        for i in range(N):
-            total_results["binary_tree%d"%i] = renderer.render(**common_params2,
-                                                                binary_tree_split_sample_number=12000,
-                                                                binary_tree_split_invalid_rate_threshold=1.0/N*(i+1))
-
-    def test_3(name, sample_type, update_type):
-        #target_epsilon = [0.0, 0.1, 0.2, 0.5, 0.8, 0.9, 1.0]
-        target_epsilon = [0.0,
-                          0.0001, 0.0002, 0.0005,
-                          0.001, 0.002, 0.005,
-                          0.01, 0.02, 0.05,
-                          0.1, 0.2,
-                          0.5,
-                          0.8, 0.9,
-                          0.95, 0.98, 0.99,
-                          0.995, 0.998, 0.999,
-                          1.0]
-        for epsilon in target_epsilon:
-            total_results[name+"_"+str(epsilon)] = renderer.render(**common_params, sample_type=sample_type,
-                                                                   q_table_update_method=update_type, min_epsilon=epsilon)
-
-    def test_4():
-        total_results["q_brdf_rej_sarsa_mix"] = renderer.render(**common_params,
-                                                                         sample_type=SAMPLE_Q_COS_REJECT_MIX,
-                                                                         q_table_update_method=Q_UPDATE_SARSA,
-                                                                        use_memoization=True)
-        total_results["q_brdf_rej_sarsa_mix_no_memoization"] = renderer.render(**common_params,
-                                                                         sample_type=SAMPLE_Q_COS_REJECT_MIX,
-                                                                         q_table_update_method=Q_UPDATE_SARSA,
-                                                                         use_memoization=False)
-
-    def test_5():
-        total_results["sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT,
-                                                q_table_update_method=Q_UPDATE_SARSA)
-        total_results["exp_sarsa"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT,
-                                                q_table_update_method=Q_UPDATE_EXPECTED_SARSA)
-        total_results["monte_carlo"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT,
-                                                q_table_update_method=Q_UPDATE_MONTE_CARLO)
-
-        # total_results["ours_no_explore"] = renderer.render(**common_params, sample_type=SAMPLE_Q_COS_REJECT,
-        #                                                         q_table_update_method=Q_UPDATE_SARSA, no_exploration=True)
-
-        # Muller 17
-        total_results["q_mis_quadtree_mc"] = renderer.render(**common_params,
-                                                             sample_type=SAMPLE_Q_QUADTREE,
-                                                             force_update_q_table=True,
-                                                             directional_mapping_method="cylindrical",
-                                                             directional_type="quadtree",
-                                                             sample_combination="discard",
-                                                             learning_method="exponential",
-                                                             bsdf_sampling_fraction=0.5,
-                                                             q_table_update_method=Q_UPDATE_MONTE_CARLO)
-
-    def test_6():
-        renderer.construct_stree(scene_name, max_octree_depth=5, visualize=visualize_octree)
-
-        total_results["q_brdf_inv_sarsa_octree"] = renderer.render(**common_params, spatial_type='octree',
-                                                                   sample_type=SAMPLE_Q_COS_PROPORTION,
-                                                                   q_table_update_method=Q_UPDATE_SARSA)
-        total_results["q_brdf_inv_sarsa_grid"] = renderer.render(**common_params, spatial_type='grid',
-                                                                    sample_type=SAMPLE_Q_COS_PROPORTION,
-                                                                    q_table_update_method=Q_UPDATE_SARSA)
+        #                                          sample_type=SAMPLE_Q_QUADTREE,
+        #                                          quad_tree_update_type='gpu',
+        #                                          force_update_q_table=True,
+        #                                          directional_mapping_method="cylindrical",
+        #                                          directional_type="quadtree",
+        #                                          learning_method="exponential",
+        #                                          bsdf_sampling_fraction=0.5,
+        #                                          q_table_update_method=Q_UPDATE_MONTE_CARLO)
+        total_results["binary_tree_gpu"] = renderer.render(**common_params,
+                                                     sample_type=SAMPLE_Q_QUADTREE,
+                                                     quad_tree_update_type='gpu',
+                                                     force_update_q_table=True,
+                                                     directional_mapping_method="cylindrical",
+                                                     directional_type="quadtree",
+                                                     spatial_type="binary_tree",
+                                                     learning_method="exponential",
+                                                     bsdf_sampling_fraction=0.5,
+                                                     q_table_update_method=Q_UPDATE_MONTE_CARLO,
+                                                     binary_tree_split_sample_number=12000)
+        total_results["binary_tree_cpu_single"] = renderer.render(**common_params,
+                                                     sample_type=SAMPLE_Q_QUADTREE,
+                                                     quad_tree_update_type='cpu_single',
+                                                     force_update_q_table=True,
+                                                     directional_mapping_method="cylindrical",
+                                                     directional_type="quadtree",
+                                                     spatial_type="binary_tree",
+                                                     learning_method="exponential",
+                                                     bsdf_sampling_fraction=0.5,
+                                                     q_table_update_method=Q_UPDATE_MONTE_CARLO,
+                                                     binary_tree_split_sample_number=12000)
+        total_results["binary_tree_cpu_multi"] = renderer.render(**common_params,
+                                                     sample_type=SAMPLE_Q_QUADTREE,
+                                                     quad_tree_update_type='cpu_multi',
+                                                     force_update_q_table=True,
+                                                     directional_mapping_method="cylindrical",
+                                                     directional_type="quadtree",
+                                                     spatial_type="binary_tree",
+                                                     learning_method="exponential",
+                                                     bsdf_sampling_fraction=0.5,
+                                                     q_table_update_method=Q_UPDATE_MONTE_CARLO,
+                                                     binary_tree_split_sample_number=12000)
 
     if test_target == 1:
         test_1()
     elif test_target == 2:
         test_2()
-    elif test_target == 3:
-        test_3()
-    elif test_target == 4:
-        test_4()
-    elif test_target == 5:
-        test_5()
-    elif test_target == 6:
-        test_6()
 
     if show_result:
         show_result_bar(total_results, "error_mean")
@@ -329,7 +267,8 @@ def test_single_scene(scene_name,
 def test_multiple_and_export_result(scene_list, scale, output_folder, _time=5, _spp=256, test_time=False, test_target=1):
     for scene in scene_list:
         #try:
-        test_single_scene(scene, scale, test_time=test_time, show_result=False, _time=_time, _spp=_spp, output_folder=output_folder, test_target=test_target)
+        test_single_scene(scene, scale, test_time=test_time, show_picture=True, show_result=False, _time=_time,
+                          _spp=_spp, output_folder=output_folder, test_target=test_target)
         # except Exception:
         #     print("Scene Error")
 

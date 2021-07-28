@@ -21,33 +21,38 @@
 #include "optix/common/sampling.h"
 #include "optix/common/material_parameters.h"
 #include "optix/bsdf/fresnel.h"
-#include "optix/bsdf/material_constants.h"
 #include "optix/bsdf/bsdf_sample.h"
+#include "optix/utils/material_value_loader.h"
 
 using namespace optix;
 namespace conductor
 {
-RT_CALLABLE_PROGRAM BSDFSample3f Sample(const MaterialParameter &mat, const float3 &wi, unsigned int &seed)
+__device__ uint32_t flags = BSDFFlags::DeltaReflection | BSDFFlags::FrontSide;
+
+RT_CALLABLE_PROGRAM void Sample(
+    const MaterialParameter &mat, const SurfaceInteraction &si,
+    unsigned int &seed, BSDFSample3f &bs
+)
 {
-    BSDFSample3f bs;
-    if(wi.z < 0){
+    float3 specular_reflectance = eval_specular_reflectance(mat, si);
+    if(si.wi.z < 0){
         bs.pdf = 1.0;
         bs.weight = make_float3(0.0);
-        return bs;
+        return;
     }
-    bs.wo = make_float3(-wi.x, -wi.y, wi.z);
+    bs.wo = make_float3(-si.wi.x, -si.wi.y, si.wi.z);
     bs.pdf = 1.0f;
-    bs.weight = mat.albedo * fresnel::ConductorReflectance(eta, k, wi.z);
+    bs.weight = specular_reflectance * fresnel::ConductorReflectance(mat.eta, mat.k, si.wi.z);
     bs.sampledLobe = BSDFLobe::SpecularReflectionLobe;
-    return bs;
+    return;
 }
 
-RT_CALLABLE_PROGRAM float3 Eval(const MaterialParameter &mat, const float3 &wi, const float3 &wo)
+RT_CALLABLE_PROGRAM float3 Eval(const MaterialParameter &mat, const SurfaceInteraction &si, const float3 &wo)
 {
     return make_float3(0.0f);
 }
 
-RT_CALLABLE_PROGRAM float Pdf(const MaterialParameter &mat, const float3 &wi, const float3 &wo)
+RT_CALLABLE_PROGRAM float Pdf(const MaterialParameter &mat, const SurfaceInteraction &si, const float3 &wo)
 {
     return 1.0f;
 }

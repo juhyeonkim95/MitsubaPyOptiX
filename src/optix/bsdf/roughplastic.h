@@ -30,21 +30,28 @@ using namespace optix;
 
 namespace roughplastic
 {
-RT_CALLABLE_PROGRAM BSDFSample3f Sample(const MaterialParameter &mat, const float3 &wi, unsigned int &seed)
+__device__ uint32_t flags = BSDFFlags::GlossyReflection | BSDFFlags::DiffuseReflection | BSDFFlags::FrontSide;
+
+RT_CALLABLE_PROGRAM void Sample(
+    const MaterialParameter &mat, const SurfaceInteraction &si,
+    unsigned int &seed, BSDFSample3f &bs
+)
 {
-    BSDFSample3f bs;
+    const float3 &wi = si.wi;
+
     if(wi.z < 0){
         bs.pdf = 1.0;
         bs.weight = make_float3(0.0);
-        return bs;
+        return;
     }
 
+    float3 diffuse_reflectance = eval_diffuse_reflectance(mat, si);
     float ior = mat.intIOR / mat.extIOR;
     float eta = 1 / ior;
-    float Fi = fresnel::DielectricReflectance( eta, wi.z);
+    float Fi = fresnel::DielectricReflectance(eta, wi.z);
 
     float s_mean = 1.0f;
-    float d_mean = (mat.albedo.x + mat.albedo.x + mat.albedo.z) / 3.0f;
+    float d_mean = (diffuse_reflectance.x + diffuse_reflectance.x + diffuse_reflectance.z) / 3.0f;
     float m_specular_sampling_weight = s_mean / (d_mean + s_mean);
 
 
@@ -62,9 +69,9 @@ RT_CALLABLE_PROGRAM BSDFSample3f Sample(const MaterialParameter &mat, const floa
 
 	if( rnd(seed) <= prob_specular )
 	{
-        bs = roughdielectric::SampleBase(mat, true, false, wi, seed);
+        roughdielectric::SampleBase(mat, true, false, si, seed, bs);
 
-        float3 diffuseAlbedo = mat.albedo;
+        float3 diffuseAlbedo = diffuse_reflectance;
         float Fo = fresnel::DielectricReflectance(eta, bs.wo.z);
 
         float3 temp = (mat.nonlinear ? diffuseAlbedo * _diffuseFresnel : make_float3(_diffuseFresnel));
@@ -77,13 +84,13 @@ RT_CALLABLE_PROGRAM BSDFSample3f Sample(const MaterialParameter &mat, const floa
 
         bs.weight = (brdfSpecular + brdfSubstrate)/(pdfSpecular + pdfSubstrate);
         bs.pdf = pdfSpecular + pdfSubstrate;
-        return bs;
+        return;
 	}
 	else
 	{
 	    cosine_sample_hemisphere(rnd(seed), rnd(seed), bs.wo);
         float Fo = fresnel::DielectricReflectance(eta, bs.wo.z);
-        float3 diffuseAlbedo = mat.albedo;
+        float3 diffuseAlbedo = diffuse_reflectance;
 
         float3 temp = (mat.nonlinear ? diffuseAlbedo * _diffuseFresnel : make_float3(_diffuseFresnel));
         bs.weight = ((1.0f - Fi)*(1.0f - Fo)*eta*eta)*(diffuseAlbedo/(1.0f - temp));
@@ -91,22 +98,22 @@ RT_CALLABLE_PROGRAM BSDFSample3f Sample(const MaterialParameter &mat, const floa
 
         float3 brdfSubstrate = bs.weight*bs.pdf;
         float  pdfSubstrate = bs.pdf*(1.0f - specularProbability);
-        float3 brdfSpecular = roughdielectric::Eval(mat, wi, bs.wo);
-        float pdfSpecular  = roughdielectric::PdfBase(mat, true, false, wi, bs.wo);
+        float3 brdfSpecular = roughdielectric::Eval(mat, si, bs.wo);
+        float pdfSpecular  = roughdielectric::PdfBase(mat, true, false, si, bs.wo);
         pdfSpecular *= specularProbability;
 
         bs.weight = (brdfSpecular + brdfSubstrate)/(pdfSpecular + pdfSubstrate);
         bs.pdf = pdfSpecular + pdfSubstrate;
 	}
-    return bs;
+    return;
 }
 
-RT_CALLABLE_PROGRAM float3 Eval(const MaterialParameter &mat, const float3 &wi, const float3 &wo)
+RT_CALLABLE_PROGRAM float3 Eval(const MaterialParameter &mat, const SurfaceInteraction &si, const float3 &wo)
 {
     return make_float3(0.0f);
 }
 
-RT_CALLABLE_PROGRAM float Pdf(const MaterialParameter &mat, const float3 &wi, const float3 &wo){
+RT_CALLABLE_PROGRAM float Pdf(const MaterialParameter &mat, const SurfaceInteraction &si, const float3 &wo){
     return 0.0f;
 }
 }

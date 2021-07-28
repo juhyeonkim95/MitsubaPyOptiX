@@ -2,41 +2,36 @@
 #include "optix/common/rt_function.h"
 #include "optix/common/helpers.h"
 
-RT_CALLABLE_PROGRAM float pdf_light_point(float3 &pos, float3 &wi, LightParameter &light)
+RT_CALLABLE_PROGRAM float pdf_light_point(const float3 &pos, const float3 &wi, const LightParameter &light)
 {
     return 0.0f;
 }
 
-RT_CALLABLE_PROGRAM float pdf_light_direction(float3 &pos, float3 &wi, LightParameter &light)
+RT_CALLABLE_PROGRAM float pdf_light_direction(const float3 &pos, const float3 &wi, const LightParameter &light)
 {
     return 0.0f;
 }
 
-RT_CALLABLE_PROGRAM float pdf_light_spot(float3 &pos, float3 &wi, LightParameter &light)
+RT_CALLABLE_PROGRAM float pdf_light_spot(const float3 &pos, const float3 &wi, const LightParameter &light)
 {
     return 0.0f;
 }
 
 
-RT_CALLABLE_PROGRAM float pdf_light_area(float3 &pos, float3 &wi, LightParameter &light)
+RT_CALLABLE_PROGRAM float pdf_light_sphere(const float3 &pos, const float3 &wi, const LightParameter &light)
 {
-    if (light.lightType == LIGHT_QUAD || light.lightType == LIGHT_DISK){
-        return 1 / light.area;
-    } else if (light.lightType == LIGHT_SPHERE) {
-    	float3 L = pos - light.position;
-    	float Ldist2 = dot(L, L);
-    	float Ldist = sqrtf(Ldist2);
-	    bool inside = Ldist <= light.radius;
-	    if(inside)
-            return 1 / light.area;
-        float cos_theta_max = light.radius / Ldist;
-        float area = (2 * M_PIf * (1 - cos_theta_max)) * light.radius * light.radius;
-        return 1 / area;
-    }
-    return 0.0;
+    float3 L = pos - light.position;
+    float Ldist2 = dot(L, L);
+    float Ldist = sqrtf(Ldist2);
+    bool inside = Ldist <= light.radius;
+    if(inside)
+        return light.inv_area;
+    float cos_theta_max = light.radius / Ldist;
+    float area = (2 * M_PIf * (1 - cos_theta_max)) * light.radius * light.radius;
+    return 1 / area;
 }
 
-RT_CALLABLE_PROGRAM float pdf_light_tri_mesh(int hitTriIdx, float3 &pos, float3 &wi, LightParameter &light)
+RT_CALLABLE_PROGRAM float pdf_light_tri_mesh(const int hitTriIdx, const float3 &pos, const float3 &wi, const LightParameter &light)
 {
     const int3 v_idx = light.indices_buffer_id[hitTriIdx];
 
@@ -52,19 +47,16 @@ RT_CALLABLE_PROGRAM float pdf_light_tri_mesh(int hitTriIdx, float3 &pos, float3 
 	return 1 / area * ( 1.0 / light.n_triangles );
 }
 
-RT_CALLABLE_PROGRAM float pdf_light(int hitTriIdx, float3 &pos, float3 &wi, LightParameter &light)
+RT_CALLABLE_PROGRAM float pdf_light(const int hitTriIdx, const float3 &pos, const float3 &wi, const LightParameter &light)
 {
-    if (light.lightType == LIGHT_POINT){
-        return pdf_light_point(pos, wi, light);
-    } else if (light.lightType == LIGHT_DIRECTIONAL){
-        return pdf_light_direction(pos, wi, light);
-    } else if (light.lightType == LIGHT_QUAD || light.lightType == LIGHT_SPHERE || light.lightType == LIGHT_DISK){
-        return pdf_light_area(pos, wi, light);
-    } else if (light.lightType == LIGHT_SPOT){
-        return pdf_light_spot(pos, wi, light);
-    }
-    else if (light.lightType == LIGHT_TRIANGLE_MESH){
-        return pdf_light_tri_mesh(hitTriIdx, pos, wi, light);
+    switch(light.lightType){
+        case LIGHT_QUAD: return light.inv_area;
+        case LIGHT_DISK: return light.inv_area;
+        case LIGHT_SPHERE: return pdf_light_sphere(pos, wi, light);
+//        case LIGHT_SPOT: return 0.0;
+//        case LIGHT_POINT: return 0.0;
+//        case LIGHT_DIRECTIONAL: return 0.0;
+        case LIGHT_TRIANGLE_MESH: return pdf_light_tri_mesh(hitTriIdx, pos, wi, light);
     }
     return 0.0;
 }

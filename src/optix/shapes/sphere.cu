@@ -38,8 +38,7 @@ rtDeclareVariable(optix::Ray, ray, rtCurrentRay, );
 rtDeclareVariable(int, hitTriIdx,  attribute hitTriIdx, );
 
 template<bool use_robust_method>
-static __device__
-void intersect_sphere(void)
+static __device__ void intersect_sphere(void)
 {
   float3 center = make_float3(sphere);
   float3 O = ray.origin - center;

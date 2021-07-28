@@ -5,6 +5,19 @@
 
 #include "optix/common/rt_function.h"
 
+#include <optixu/optixu_matrix_namespace.h>
+using namespace optix;
+
+struct TextureParameter
+{
+    unsigned int type;
+    unsigned int id;
+    optix::Matrix3x3 uv_transform;
+    optix::float3 color0;
+    optix::float3 color1;
+    unsigned int srgb;
+};
+
 struct MaterialParameter
 {
 //	RT_FUNCTION MaterialParameter()
@@ -27,9 +40,22 @@ struct MaterialParameter
 //        intIOR = 1.504;
 //        extIOR = 1.0;
 //	}
+    unsigned int bsdf_type;
+    // albedo or albedo texture
+	float3 albedo;
+	int albedo_texture_id;
 
-	int albedoID;
-	optix::float3 albedo;
+    float3 diffuse_reflectance;
+    int diffuse_reflectance_texture_id;
+    float3 specular_reflectance;
+    int specular_reflectance_texture_id;
+    float3 specular_transmittance;
+    int specular_transmittance_texture_id;
+    float alpha;
+    int alpha_texture_id;
+    float opacity;
+    int opacity_texture_id;
+
 	optix::float3 emission;
 	float metallic;
 	float subsurface;
@@ -41,7 +67,6 @@ struct MaterialParameter
 	float sheenTint;
 	float clearcoat;
 	float clearcoatRoughness;
-	float opacity;
 	unsigned int isTwosided;
 	float intIOR;
 	float extIOR;
@@ -50,6 +75,9 @@ struct MaterialParameter
 	float ay;
 	int distribution_type;
 	int nonlinear;
+	unsigned int bumpID;
+    optix::float3 eta;
+    optix::float3 k;
 };
 
 struct State
