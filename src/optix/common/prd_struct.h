@@ -11,6 +11,13 @@ using namespace optix;
 //    float3 diffuse_color;
 //};
 
+struct PerPathData
+{
+    float3 result;
+    int depth;
+    bool is_valid;
+};
+
 struct PerRayData_pathtrace
 {
     float3 result;
@@ -129,8 +136,6 @@ struct SurfaceInteraction
     float3 uv;
     float3 emission;
     float3 normal;
-    // float3 tangent;
-    // float3 bitangent;
 
     int material_id;
     int light_id;
@@ -138,37 +143,4 @@ struct SurfaceInteraction
     int hitTriIdx;
     float t;
     unsigned int seed;
-
-    // TBN onb;
-
-//    RT_FUNCTION void set_from_normal(const optix::float3& n)
-//    {
-//        normal = n;
-//        if (fabsf(normal.z) < fabsf(normal.x))
-//        {
-//            tangent.x =  normal.z;
-//            tangent.y =  0.0f;
-//            tangent.z = -normal.x;
-//        }
-//        else
-//        {
-//            tangent.x =  0.0f;
-//            tangent.y =  normal.z;
-//            tangent.z = -normal.y;
-//        }
-//        tangent   = optix::normalize(tangent);
-//        bitangent = optix::cross(normal, tangent);
-//    }
-//    RT_FUNCTION optix::float3 to_local(optix::float3& p) const
-//    {
-//        return optix::make_float3(optix::dot(p, tangent),
-//                          optix::dot(p, bitangent),
-//                          optix::dot(p, normal));
-//    }
-//
-//    RT_FUNCTION optix::float3 to_world(optix::float3& p) const
-//    {
-//        return p.x * tangent + p.y * bitangent + p.z * normal;
-//    }
-
 };

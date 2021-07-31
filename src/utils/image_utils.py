@@ -44,38 +44,3 @@ def load_image(path):
     image = image[:, :, 0:3]
     image /= 255.0
     return image
-
-
-def show_result_bar(dictionaries, target_key):
-    plt.figure()
-    names = []
-    values = []
-    for k, v in dictionaries.items():
-        name = k
-        names.append(name)
-        values.append(v[target_key])
-
-    plt.bar(names, values)
-    value_set = set(values)
-    print(values)
-    if len(value_set) > 1:
-        low = min(values)
-        high = max(values)
-        print(low, high)
-        plt.ylim([max((low - 0.5 * (high - low)), 0), (high + 0.5 * (high - low))])
-    plt.xticks(rotation=90)
-    plt.ylabel(target_key)
-    plt.show()
-
-
-def show_result_sequence(dictionaries, key):
-    plt.figure()
-    names = []
-    for k, v in dictionaries.items():
-        name = k
-        names.append(name)
-        N = len(v[key])
-        plt.plot([_ for _ in range(N)], v[key], label=k)
-    plt.ylabel(key)
-    plt.legend()
-    plt.show()

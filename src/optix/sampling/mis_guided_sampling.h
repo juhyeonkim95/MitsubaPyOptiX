@@ -6,15 +6,10 @@
 #include "optix/common/rt_function.h"
 #include "optix/common/helpers.h"
 #include "optix/common/prd_struct.h"
-#include "optix/q_table/radiance_record.cuh"
+#include "optix/radiance_record/radiance_record.h"
 #include "optix/bsdf/bsdf_flags.h"
 
-#define SAMPLE_COSINE 1
-#define SAMPLE_Q_QUADTREE 7
-
-
 rtDeclareVariable(float,         bsdf_sampling_fraction, , );
-rtDeclareVariable(unsigned int,     sample_type, , );
 
 using namespace optix;
 
@@ -26,7 +21,7 @@ RT_FUNCTION void Sample(
     const optix::Onb &onb, unsigned int &seed, BSDFSample3f &bs)
 {
 
-    if(sample_type == SAMPLE_COSINE || !(mat.bsdf_type & BSDFTypes::GuideTargets)){
+    if(!(mat.bsdf_type & BSDFTypes::GuideTargets)){
         bsdf::Sample(mat, si, seed, bs);
         onb.inverse_transform(bs.wo);
         return;
@@ -45,12 +40,12 @@ RT_FUNCTION void Sample(
         bsdf_pdf = bs.pdf;
         bs.weight *= bsdf_pdf;     // f * cos(theta) / pdf to f * cos(theta)
 
-        radiance_pdf = radiance_record::Pdf(si.p, si.normal, bs.wo, sample_type);
+        radiance_pdf = radiance_record::Pdf(si.p, si.normal, bs.wo);
     }
 
     // (2) Radiance Sampling (prop to Q)
     else {
-        Sample_info sample_info = radiance_record::Sample(si.p, si.normal, seed, sample_type);
+        Sample_info sample_info = radiance_record::Sample(si.p, si.normal, seed);
 
         bs.wo = sample_info.direction;
         radiance_pdf = sample_info.pdf;
@@ -74,12 +69,12 @@ RT_FUNCTION float Pdf(
 {
     float3 wo_local = to_local(onb, wo);
 
-    if(sample_type == SAMPLE_COSINE || !(mat.bsdf_type | BSDFTypes::GuideTargets)){
+    if(!(mat.bsdf_type | BSDFTypes::GuideTargets)){
         return bsdf::Pdf(mat, si, wo_local);
     }
 
     // ----------------------- Guided sampling ----------------------
-    float radiance_pdf = radiance_record::Pdf(si.p, si.normal, wo, sample_type);
+    float radiance_pdf = radiance_record::Pdf(si.p, si.normal, wo);
     float bsdf_pdf = bsdf::Pdf(mat, si, wo_local);
     float pdf = bsdf_sampling_fraction * bsdf_pdf + (1 - bsdf_sampling_fraction) * radiance_pdf;
     return pdf;

@@ -25,7 +25,7 @@ class QTable:
         elif self.spatial_type == "octree":
             self.n_s = self.octree.node_number
         elif self.spatial_type == "binary_tree":
-            self.n_s = kwargs.get("binary_tree_max_size", 512 * 4)
+            self.n_s = kwargs.get("binary_tree_max_size", 512 * 8)
             self.spatial_binary_tree = SpatialAdaptiveBinaryTree(self.n_s)
 
         # Number of actions
@@ -49,7 +49,7 @@ class QTable:
         self.valid_sample_counts = np.zeros((self.n_s,), dtype=np.uint32)
 
         if self.directional_type == "quadtree":
-            self.directional_quadtree = DirectionalQuadTree(self.q_table, self.n_a)
+            self.directional_quadtree = DirectionalQuadTree(self.q_table, self.n_a, kwargs.get("quad_tree_update_type", 'cpu_single'))
 
     def visualize_radiance(self, p):
         if self.spatial_type == "binary_tree":
@@ -106,17 +106,17 @@ class QTable:
     def register_to_context(self, context):
         # (1) Spatial
         if self.spatial_type == 'grid':
-            context['spatial_table_type'] = np.array(0, dtype=np.uint32)
+            context['spatial_data_structure_type'] = np.array(0, dtype=np.uint32)
         elif self.spatial_type == 'octree':
-            context['spatial_table_type'] = np.array(1, dtype=np.uint32)
+            context['spatial_data_structure_type'] = np.array(1, dtype=np.uint32)
         elif self.spatial_type == 'binary_tree':
-            context['spatial_table_type'] = np.array(2, dtype=np.uint32)
+            context['spatial_data_structure_type'] = np.array(2, dtype=np.uint32)
 
         # (2) Directional
         if self.directional_type == 'grid':
-            context['directional_table_type'] = np.array(0, dtype=np.uint32)
+            context['directional_data_structure_type'] = np.array(0, dtype=np.uint32)
         elif self.directional_type == 'quadtree':
-            context['directional_table_type'] = np.array(1, dtype=np.uint32)
+            context['directional_data_structure_type'] = np.array(1, dtype=np.uint32)
 
         if self.directional_mapping_method == 'equal_area':
             context['directional_mapping_method'] = np.array(0, dtype=np.uint32)
@@ -171,10 +171,10 @@ class QTable:
         for p in copy_list:
             d, s = p
             self.q_table[d] = self.q_table[s]
-            self.q_table_accumulated[d] = self.q_table_accumulated[s]
-            self.q_table_pdf[d] = self.q_table_pdf[s]
-            self.q_table_visit_counts[d] = self.q_table_visit_counts[s]
-            self.q_table_normal_counts[d] = self.q_table_normal_counts[s]
+            #self.q_table_accumulated[d] = self.q_table_accumulated[s]
+            #self.q_table_pdf[d] = self.q_table_pdf[s]
+            #self.q_table_visit_counts[d] = self.q_table_visit_counts[s]
+            #self.q_table_normal_counts[d] = self.q_table_normal_counts[s]
 
     def copy_to_context(self, context):
         context['q_table'].copy_from_array(self.q_table)
@@ -237,53 +237,38 @@ class QTable:
             context['q_table'].copy_to_array(self.q_table)
 
         if self.directional_type == 'quadtree':
-            # print("QUADTREE VISUALIZE")
-            # self.visualize_radiance(np.array([0.4, 0.5, 0.1]))
 
             if self.spatial_type == "binary_tree":
-                n_s = self.spatial_binary_tree.size
+                n_s = self.spatial_binary_tree.leaf_node_number
             else:
                 n_s = self.n_s
             print("Spatial size", n_s)
+
             self.directional_quadtree.refine(context, n_s, self.q_table, quad_tree_update_type, threshold=0.01)
 
             if self.spatial_type == "binary_tree":
                 print("Binary tree update start")
-                # context.launch(2, 1)
-                # print("Binary tree update end")
-                # c = 12000
 
-                invalid_rate_threshold = kwargs.get("binary_tree_split_invalid_rate_threshold", 1.0)
                 c = kwargs.get("binary_tree_split_sample_number", 12000)
                 threshold = int(math.pow(2, k / 2) * c)
                 self.spatial_binary_tree.copy_from_context(context)
                 self.spatial_binary_tree.visit_count_array[:] = np.sum(self.q_table_visit_counts, axis=1)
 
-                copy_pairs = self.spatial_binary_tree.refine(threshold, invalid_rates, invalid_rate_threshold)
-                # self.spatial_binary_tree.visualize()
+                self.spatial_binary_tree.refine_native(self.directional_quadtree, self.directional_quadtree.dtree_value_array, threshold)
+
+                #copy_pairs = self.spatial_binary_tree.refine(threshold, invalid_rates, None)
+                #self.directional_quadtree.copy_to_child(copy_pairs)
 
                 self.spatial_binary_tree.copy_to_context(context)
-                print("Copy pairs", copy_pairs)
 
-                self.directional_quadtree.copy_from_context(context)
-                self.directional_quadtree.copy_to_child(copy_pairs)
-                self.directional_quadtree.copy_to_context(context)
-
-                #self.q_table_accumulated.fill(0)
-                #self.q_table_visit_counts.fill(0)
-                #context['q_table_accumulated'].copy_from_array(self.q_table_accumulated)
-                #context['q_table_visit_counts'].copy_from_array(self.q_table_visit_counts)
-
-                #print("Q Table", np.sum(self.q_table))
-                #print("Q Table 2", np.sum(self.directional_quadtree.dtree_value_array))
-                #context['q_table'].copy_from_array(self.directional_quadtree.dtree_value_array)
-                #context['q_table_pdf'].copy_from_array(self.q_table_pdf)
-                #context['q_table_normal_counts'].copy_from_array(self.q_table_normal_counts)
-
-                self.copy_from_context(context)
-                self.copy_to_child(copy_pairs)
-                self.copy_to_context(context)
                 print("Binary tree update end")
+
+            context['q_table'].copy_from_array(self.directional_quadtree.dtree_value_array)
+            self.directional_quadtree.copy_to_context(context)
+            zeros = np.zeros((self.n_s, self.n_a), dtype=np.float32)
+            zeros2 = np.zeros((self.n_s, self.n_a), dtype=np.uint32)
+            context['q_table_accumulated'].copy_from_array(zeros)
+            context['q_table_visit_counts'].copy_from_array(zeros2)
 
             return
 

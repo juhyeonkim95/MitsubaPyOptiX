@@ -60,7 +60,6 @@ class Scene:
         self.height = 0
         self.has_envmap = False
 
-    @timing
     def load_scene_from(self, file_name):
         """
         Load scene from file.
@@ -118,213 +117,6 @@ class Scene:
         emitter_load_logger.info("Total %d emitters" % len(self.light_list))
         for light in self.light_list:
             emitter_load_logger.info(str(light))
-
-    @timing
-    def optix_create_geometry_instances(self, program_dictionary, material_dict, force_all_diffuse=False):
-        Shape.program_dictionary = program_dictionary
-
-        opaque_material = material_dict['opaque_material']
-        cutout_material = material_dict['cutout_material']
-        light_material = material_dict['light_material']
-
-        geometry_instances = []
-        light_instances = []
-
-        for shape in self.shape_list:
-            shape_type = shape.shape_type
-            geometry = None
-            bbox = None
-            geometry = shape.to_optix_geometry()
-            bbox = shape.get_bbox()
-
-            # (1) create geometry
-            if shape_type == "obj":
-                mesh = self.obj_geometry_dict[shape.obj_file_name]
-                shape.mesh = mesh
-                geometry = mesh.geometry
-                bbox = mesh.bbox
-            elif shape_type == "rectangle":
-                geometry = shape.to_optix_geometry()
-                bbox = shape.get_bbox()
-            elif shape_type == "sphere":
-                geometry = shape.to_optix_geometry()
-                bbox = shape.get_bbox()
-            elif shape_type == "disk":
-                geometry = shape.to_optix_geometry()
-                bbox = shape.get_bbox()
-            elif shape_type == "cube":
-                geometry = shape.to_optix_geometry()
-                bbox = shape.get_bbox()
-
-            # (2) create material
-            print(shape.bsdf.bsdf_type)
-            if shape.emitter is not None:
-                target_material = light_material
-            else:
-                bsdf_type = shape.bsdf.bsdf_type
-                if bsdf_type == "mask":
-                    target_material = cutout_material
-                else:
-                    target_material = opaque_material
-
-            geometry_instance = GeometryInstance(geometry, target_material)
-            mat_id = np.array(shape.bsdf.list_index, dtype=np.int32)
-            emitter_id = np.array(shape.emitter.list_index if shape.emitter is not None else -1, dtype=np.int32)
-            bsdf_type = np.array(int(shape.bsdf.optix_bsdf_type), dtype=np.int32)
-
-            print("INFO", mat_id, emitter_id, bsdf_type)
-            geometry_instance['materialId'] = mat_id
-            geometry_instance["lightId"] = emitter_id
-            geometry_instance['programId'] = bsdf_type
-
-            # bsdf = shape.bsdf
-            # geometry_instance = None
-            # if material_parameter.type == "light":
-            #     geometry_instance = GeometryInstance(geometry, light_material)
-            #     geometry_instance["emission_color"] = material_parameter.emission
-            #     geometry_instance["lightId"] = np.array(len(self.lights), dtype=np.int32)
-            #     light = {"type": "area", "shape_data": shape, "emission": material_parameter.emission,
-            #              "isTwosided": material_parameter.is_double_sided}
-            #     self.lights.append(light)
-            # else:
-            #
-            #     if material_parameter.is_cutoff:
-            #         target_material = cutout_material
-            #     else:
-            #         target_material = opaque_material
-                # if material_parameter.color0 is not None:
-                #     geometry_instance = GeometryInstance(geometry, target_material)
-                #     geometry_instance['programId'] = np.array(0, dtype=np.int32)
-                #     geometry_instance['hasCheckerboard'] = np.array(1, dtype=np.int32)
-                #     target_material['color0'] = material_parameter.color0
-                #     target_material['color1'] = material_parameter.color1
-                #     geometry_instance['to_uv'] = material_parameter.to_uv
-                #     geometry_instance['materialId'] = np.array(material_parameter.uuid, dtype=np.int32)
-                # el
-                # if material_parameter.type == "diffuse":
-                #     geometry_instance = GeometryInstance(geometry, target_material)
-                #     geometry_instance['programId'] = np.array(0, dtype=np.int32)
-                #     geometry_instance['materialId'] = np.array(material_parameter.uuid, dtype=np.int32)
-                # elif material_parameter.type == "dielectric":
-                #     geometry_instance = GeometryInstance(geometry, target_material)
-                #     geometry_instance['programId'] = np.array(1, dtype=np.int32)
-                #     geometry_instance['materialId'] = np.array(material_parameter.uuid, dtype=np.int32)
-                # elif material_parameter.type == "roughdielectric":
-                #     geometry_instance = GeometryInstance(geometry, target_material)
-                #     geometry_instance['programId'] = np.array(2, dtype=np.int32)
-                #     geometry_instance['materialId'] = np.array(material_parameter.uuid, dtype=np.int32)
-                # elif material_parameter.type == "conductor":
-                #     geometry_instance = GeometryInstance(geometry, target_material)
-                #     geometry_instance['programId'] = np.array(3, dtype=np.int32)
-                #     geometry_instance['eta'] = material_parameter.eta
-                #     geometry_instance['k'] = material_parameter.k
-                #     geometry_instance['materialId'] = np.array(material_parameter.uuid, dtype=np.int32)
-                # elif material_parameter.type == "roughconductor":
-                #     geometry_instance = GeometryInstance(geometry, target_material)
-                #     geometry_instance['programId'] = np.array(4, dtype=np.int32)
-                #     geometry_instance['eta'] = material_parameter.eta
-                #     geometry_instance['k'] = material_parameter.k
-                #     geometry_instance['materialId'] = np.array(material_parameter.uuid, dtype=np.int32)
-                # elif material_parameter.type == "plastic":
-                #     geometry_instance = GeometryInstance(geometry, target_material)
-                #     geometry_instance['programId'] = np.array(5, dtype=np.int32)
-                #     geometry_instance['materialId'] = np.array(material_parameter.uuid, dtype=np.int32)
-                # elif material_parameter.type == "roughplastic":
-                #     geometry_instance = GeometryInstance(geometry, target_material)
-                #     geometry_instance['programId'] = np.array(6, dtype=np.int32)
-                #     geometry_instance['materialId'] = np.array(material_parameter.uuid, dtype=np.int32)
-                # elif material_parameter.type == "disney":
-                #     geometry_instance = GeometryInstance(geometry, target_material)
-                #     geometry_instance['programId'] = np.array(99, dtype=np.int32)
-                #     geometry_instance['materialId'] = np.array(material_parameter.uuid, dtype=np.int32)
-                # if force_all_diffuse:
-                #     geometry_instance['programId'] = np.array(0, dtype=np.int32)
-
-            if isinstance(shape, InstancedShape):
-                bbox = get_bbox_transformed(bbox, np.array(shape.transform.transpose(), dtype=np.float32))
-
-            # merge bbox
-            self.bbox = get_bbox_merged(self.bbox, bbox)
-
-            if isinstance(shape, OBJMesh):
-                geometry_instance["faceNormals"] = np.array(1 if shape.face_normals else 0, dtype=np.int32)
-
-            if isinstance(shape, InstancedShape):
-                transform = add_transform(shape.transform, geometry_instance)
-            else:
-                transform = add_transform(None, geometry_instance)
-            #if shape.transformation is not None:
-            # geometry_instance["transformation"] = shape.transformation
-            if target_material == light_material:
-                light_instances.append(transform)
-            else:
-                geometry_instances.append(transform)
-
-        # if self.name == "veach_door_simple":
-        #     o = np.array([34.3580, 136.5705, -321.7834], dtype=np.float32)
-        #     ox = np.array([-117.2283, 136.5705, -321.7834], dtype=np.float32)
-        #     oy = np.array([34.3580, 76.5705, -321.7834], dtype=np.float32)
-        #     u = ox - o
-        #     v = oy - o
-        #     geometry = create_parallelogram(o, u, v, par_int, par_bb)
-        #     geometry_instance = GeometryInstance(geometry, light_material)
-        #     emission_color = np.array([1420, 1552, 1642], dtype=np.float32)
-        #     geometry_instance["emission_color"] = emission_color
-        #     light_instances.append(add_transform(None, geometry_instance))
-        #     shape = ShapeParameter()
-        #     shape.shape_type = "rectangle"
-        #     shape.rectangle_info = (o, u, v)
-        #     light = {"type": "area", "shape_data": shape, "emission": emission_color}
-        #     self.lights.append(light)
-
-        self.geometry_instances = geometry_instances
-        self.light_instances = light_instances
-
-    @timing
-    def optix_create_objs(self, program_dictionary):
-        mesh_bb = program_dictionary['tri_mesh_bb']
-        mesh_it = program_dictionary['tri_mesh_it']
-
-        for obj_file_name in self.obj_name_list:
-            mesh = OptixMesh(mesh_bb, mesh_it)
-            mesh.load_from_file(self.folder_path + "/" + obj_file_name)
-            self.obj_geometry_dict[obj_file_name] = mesh
-
-    @timing
-    def optix_load_textures(self):
-        from core.textures.bitmap import BitmapTexture
-
-        # environment map
-        for light in self.light_list:
-            if isinstance(light, EnvironmentMap):
-                self.has_envmap = True
-                tex_sampler = load_texture_sampler(self.folder_path, light.filename, gamma=1)
-                self.texture_sampler_list.append(tex_sampler)
-                light.envmapID = tex_sampler.get_id()
-                print("ENV loaded", light.envmapID, light.filename)
-
-        # get all materials
-        self.texture_list = []
-        for material in self.material_list:
-            self.texture_list += material.get_textures()
-        self.texture_name_list = []
-        for texture in self.texture_list:
-            if isinstance(texture, BitmapTexture) and texture.filename not in self.texture_name_list:
-                self.texture_name_list.append(texture.filename)
-
-        print("Load texture list")
-        print(self.texture_name_list)
-
-        for texture_name in self.texture_name_list:
-            tex_sampler = load_texture_sampler(self.folder_path, texture_name, gamma=2.2)
-            self.texture_name_to_optix_index_dictionary[texture_name] = tex_sampler.get_id()
-            self.texture_sampler_list.append(tex_sampler)
-
-        # assign optix id and list id to texture
-        for (i, texture) in enumerate(self.texture_list):
-            if isinstance(texture, BitmapTexture):
-                texture.texture_optix_id = self.texture_name_to_optix_index_dictionary[texture.filename]
-            texture.list_index = i
 
     def load_shapes(self, root):
         """
@@ -411,3 +203,132 @@ class Scene:
         self.material_list.append(material)
 
         return material
+
+    def optix_load_objs(self, program_dictionary):
+        """
+        Load OBJ files and store it as OptiX Geometry instance
+        :param program_dictionary:
+        :return:
+        """
+        mesh_bb = program_dictionary['tri_mesh_bb']
+        mesh_it = program_dictionary['tri_mesh_it']
+
+        for obj_file_name in self.obj_name_list:
+            mesh = OptixMesh(mesh_bb, mesh_it)
+            mesh.load_from_file(self.folder_path + "/" + obj_file_name)
+            self.obj_geometry_dict[obj_file_name] = mesh
+
+    def optix_load_textures(self):
+        """
+        Load texture data and store it as OptiX object.
+        :return:
+        """
+        from core.textures.bitmap import BitmapTexture
+
+        # environment map
+        for light in self.light_list:
+            if isinstance(light, EnvironmentMap):
+                self.has_envmap = True
+                tex_sampler = load_texture_sampler(self.folder_path, light.filename, gamma=1)
+                self.texture_sampler_list.append(tex_sampler)
+                light.envmapID = tex_sampler.get_id()
+                print("ENV loaded", light.envmapID, light.filename)
+
+        # get all materials
+        self.texture_list = []
+        for material in self.material_list:
+            self.texture_list += material.get_textures()
+        self.texture_name_list = []
+        for texture in self.texture_list:
+            if isinstance(texture, BitmapTexture) and texture.filename not in self.texture_name_list:
+                self.texture_name_list.append(texture.filename)
+
+        print("Load texture list")
+        print(self.texture_name_list)
+
+        for texture_name in self.texture_name_list:
+            tex_sampler = load_texture_sampler(self.folder_path, texture_name, gamma=2.2)
+            self.texture_name_to_optix_index_dictionary[texture_name] = tex_sampler.get_id()
+            self.texture_sampler_list.append(tex_sampler)
+
+        # assign optix id and list id to texture
+        for (i, texture) in enumerate(self.texture_list):
+            if isinstance(texture, BitmapTexture):
+                texture.texture_optix_id = self.texture_name_to_optix_index_dictionary[texture.filename]
+            texture.list_index = i
+
+    def optix_create_geometry_instances(self, program_dictionary, material_dict, force_all_diffuse=False):
+        Shape.program_dictionary = program_dictionary
+
+        opaque_material = material_dict['opaque_material']
+        cutout_material = material_dict['cutout_material']
+        light_material = material_dict['light_material']
+
+        geometry_instances = []
+        light_instances = []
+
+        for shape in self.shape_list:
+            shape_type = shape.shape_type
+            geometry = shape.to_optix_geometry()
+            bbox = shape.get_bbox()
+
+            # (1) create geometry
+            if shape_type == "obj":
+                mesh = self.obj_geometry_dict[shape.obj_file_name]
+                shape.mesh = mesh
+                geometry = mesh.geometry
+                bbox = mesh.bbox
+            elif shape_type == "rectangle":
+                geometry = shape.to_optix_geometry()
+                bbox = shape.get_bbox()
+            elif shape_type == "sphere":
+                geometry = shape.to_optix_geometry()
+                bbox = shape.get_bbox()
+            elif shape_type == "disk":
+                geometry = shape.to_optix_geometry()
+                bbox = shape.get_bbox()
+            elif shape_type == "cube":
+                geometry = shape.to_optix_geometry()
+                bbox = shape.get_bbox()
+
+            # (2) create material
+            if shape.emitter is not None:
+                target_material = light_material
+            else:
+                bsdf_type = shape.bsdf.bsdf_type
+                if bsdf_type == "mask":
+                    target_material = cutout_material
+                else:
+                    target_material = opaque_material
+
+            geometry_instance = GeometryInstance(geometry, target_material)
+            mat_id = np.array(shape.bsdf.list_index, dtype=np.int32)
+            emitter_id = np.array(shape.emitter.list_index if shape.emitter is not None else -1, dtype=np.int32)
+            bsdf_type = np.array(int(shape.bsdf.optix_bsdf_type), dtype=np.int32)
+
+            geometry_instance['materialId'] = mat_id
+            geometry_instance["lightId"] = emitter_id
+            geometry_instance['programId'] = bsdf_type
+
+            if isinstance(shape, InstancedShape):
+                bbox = get_bbox_transformed(bbox, np.array(shape.transform.transpose(), dtype=np.float32))
+
+            # merge bbox
+            self.bbox = get_bbox_merged(self.bbox, bbox)
+
+            if isinstance(shape, OBJMesh):
+                geometry_instance["faceNormals"] = np.array(1 if shape.face_normals else 0, dtype=np.int32)
+
+            if isinstance(shape, InstancedShape):
+                transform = add_transform(shape.transform, geometry_instance)
+            else:
+                transform = add_transform(None, geometry_instance)
+            #if shape.transformation is not None:
+            # geometry_instance["transformation"] = shape.transformation
+            if target_material == light_material:
+                light_instances.append(transform)
+            else:
+                geometry_instances.append(transform)
+
+        self.geometry_instances = geometry_instances
+        self.light_instances = light_instances

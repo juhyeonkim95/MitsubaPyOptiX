@@ -99,24 +99,24 @@ def export_radiance(scene_name, scale=4, n_uvs=None, render_reference=True, expo
         common_params["_spp"] = 1024
         common_params["uv_n"] = n_uv
         total_result["expected_sarsa"] = renderer.render(**common_params,
-                                 sample_type=SAMPLE_COSINE,
-                                 force_update_q_table=True,
-                                 q_table_update_method=SAMPLE_COSINE)
+                                                         sampling_strategy=SAMPLE_COSINE,
+                                                         force_update_q_table=True,
+                                                         q_table_update_method=SAMPLE_COSINE)
         total_result["monte_carlo"] = renderer.render(**common_params,
-                                 sample_type=SAMPLE_COSINE,
-                                 force_update_q_table=True,
-                                 q_table_update_method=Q_UPDATE_MONTE_CARLO)
+                                                      sampling_strategy=SAMPLE_COSINE,
+                                                      force_update_q_table=True,
+                                                      q_table_update_method=Q_UPDATE_MONTE_CARLO)
         total_result["sarsa"] = renderer.render(**common_params,
-                                 sample_type=SAMPLE_COSINE,
-                                 force_update_q_table=True,
-                                 q_table_update_method=Q_UPDATE_SARSA)
+                                                sampling_strategy=SAMPLE_COSINE,
+                                                force_update_q_table=True,
+                                                q_table_update_method=Q_UPDATE_SARSA)
         total_result["sarsa2"] = renderer.render(**common_params,
-                                 sample_type=SAMPLE_COSINE,
-                                 force_update_q_table=True,
-                                 q_table_update_method=Q_UPDATE_SARSA2)
+                                                 sampling_strategy=SAMPLE_COSINE,
+                                                 force_update_q_table=True,
+                                                 q_table_update_method=Q_UPDATE_SARSA2)
 
         # result = renderer.render(**common_params,
-        #                          sample_type=SAMPLE_COSINE,
+        #                          sampling_strategy=SAMPLE_COSINE,
         #                          force_update_q_table=True,
         #                          directional_mapping_method="cylindrical",
         #                          directional_type="quadtree",
@@ -224,8 +224,8 @@ def test2(scene_name, scale=4, test_time=False, show_picture=False, show_result=
         common_params['_spp'] = 1024
     common_params['time_limit_init_ignore_step'] = 10
 
-    total_results["uniform"] = renderer.render(**common_params, sample_type=SAMPLE_UNIFORM)
-    total_results["brdf"] = renderer.render(**common_params, sample_type=SAMPLE_COSINE)
+    total_results["uniform"] = renderer.render(**common_params, sampling_strategy=SAMPLE_UNIFORM)
+    total_results["brdf"] = renderer.render(**common_params, sampling_strategy=SAMPLE_COSINE)
     n_cubes = [16, 14, 12, 10, 8, 6, 4]
     n_uvs = [16, 14, 12, 10, 8, 6, 4]
     print(kwargs)
@@ -333,12 +333,12 @@ if __name__ == '__main__':
     #test_multiple_and_export_result(all_scenes, 2, "../result_quadtree_again/scale_2_time_40", test_time=True, _time=40)
 
     # test("cornell-box", 4, test_time=True, show_picture=False, show_result=True, _time=5,
-    #      sample_type=SAMPLE_Q_COS_REJECT, update_type=Q_UPDATE_MONTE_CARLO)
+    #      sampling_strategy=SAMPLE_Q_COS_REJECT, update_type=Q_UPDATE_MONTE_CARLO)
     #test("cornell-box", 4, test_time=True, show_picture=False, show_result=True, _time=5)
     #test("cornell-box", 4, test_time=True, show_picture=False, show_result=True, _time=5,
-    #     sample_type=SAMPLE_Q_COS_REJECT, update_type=Q_UPDATE_Q_LEARNING)
+    #     sampling_strategy=SAMPLE_Q_COS_REJECT, update_type=Q_UPDATE_Q_LEARNING)
     # test("cornell-box", 4, test_time=True, show_picture=False, show_result=True, _time=5,
-    #      sample_type=SAMPLE_Q_COS_REJECT, update_type=Q_UPDATE_EXPECTED_SARSA)
+    #      sampling_strategy=SAMPLE_Q_COS_REJECT, update_type=Q_UPDATE_EXPECTED_SARSA)
     # test("cornell-box", 4, test_time=False, show_picture=True, show_result=True, _spp=1024)
     #test("cornell-box", 4, test_time=False, show_picture=True, show_result=True, _spp=1024, output_folder="result_light_hit_experiment")
 
@@ -346,13 +346,13 @@ if __name__ == '__main__':
     #update_total_result("../result_0414_compare_epsilon_opt/scale_2_time_40", test_time=True)
     #export_radiance("cornell-box", 4, n_uvs=[16], render_reference=False, export=True)
 
-# total_dict["q_brdf_sarsa"] = {'sample_type': SAMPLE_Q_COS_PROPORTION, 'q_table_update_method': Q_UPDATE_SARSA}
-# total_dict["q_brdf_rej"] = {'sample_type': SAMPLE_Q_COS_REJECT}
-# total_dict["q_brdf_rej_sarsa"] = {'sample_type': SAMPLE_Q_COS_REJECT, 'q_table_update_method': Q_UPDATE_SARSA}
-# total_dict["q_brdf_mcmc"] = {'sample_type': SAMPLE_Q_COS_MCMC}
-# total_dict["q_brdf_mcmc_sarsa"] = {'sample_type': SAMPLE_Q_COS_MCMC, 'q_table_update_method': Q_UPDATE_SARSA}
-# total_dict["q"] = {'sample_type': SAMPLE_Q_PROPORTION}
-# total_dict["q_brdf"] = {'sample_type': SAMPLE_Q_COS_PROPORTION}
+# total_dict["q_brdf_sarsa"] = {'sampling_strategy': SAMPLE_Q_COS_PROPORTION, 'q_table_update_method': Q_UPDATE_SARSA}
+# total_dict["q_brdf_rej"] = {'sampling_strategy': SAMPLE_Q_COS_REJECT}
+# total_dict["q_brdf_rej_sarsa"] = {'sampling_strategy': SAMPLE_Q_COS_REJECT, 'q_table_update_method': Q_UPDATE_SARSA}
+# total_dict["q_brdf_mcmc"] = {'sampling_strategy': SAMPLE_Q_COS_MCMC}
+# total_dict["q_brdf_mcmc_sarsa"] = {'sampling_strategy': SAMPLE_Q_COS_MCMC, 'q_table_update_method': Q_UPDATE_SARSA}
+# total_dict["q"] = {'sampling_strategy': SAMPLE_Q_PROPORTION}
+# total_dict["q_brdf"] = {'sampling_strategy': SAMPLE_Q_COS_PROPORTION}
 
 # output_folder = '../test_20210311_n_cube_all'
 # for k, v in total_dict.items():

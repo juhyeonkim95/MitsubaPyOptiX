@@ -30,7 +30,6 @@
 
 #include "optix/common/prd_struct.h"
 #include "optix/common/helpers.h"
-//#include "optix/light/direct_light.h"
 #include "optix/common/rt_function.h"
 #include "optix/cameras/camera.h"
 #include "optix/app_config.h"
@@ -46,7 +45,7 @@ using namespace optix;
 
 // Scene wide variables
 
-rtDeclareVariable(uint3,         launch_index, rtLaunchIndex, );
+rtDeclareVariable(uint2,         launch_index, rtLaunchIndex, );
 
 //-----------------------------------------------------------------------------
 //
@@ -54,31 +53,25 @@ rtDeclareVariable(uint3,         launch_index, rtLaunchIndex, );
 //
 //-----------------------------------------------------------------------------
 
-//rtDeclareVariable(float3,        eye, , );
-//rtDeclareVariable(float3,        U, , );
-//rtDeclareVariable(float3,        V, , );
-//rtDeclareVariable(float3,        W, , );
+
 rtDeclareVariable(float3,        bad_color, , );
-rtDeclareVariable(unsigned int,  frame_number, , );
-rtDeclareVariable(unsigned int,  sqrt_num_samples, , );
+rtDeclareVariable(unsigned int,  completed_sample_number, , );
 rtDeclareVariable(unsigned int,  samples_per_pass, , );
-rtDeclareVariable(unsigned int,  accumulative_q_table_update , , );
 
 
 rtBuffer<float4, 2>              output_buffer;
 rtBuffer<float4, 2>              output_buffer2;
 
-rtBuffer<float, 2>               hit_count_buffer;
-rtBuffer<float, 2>               path_length_buffer;
+rtBuffer<unsigned int, 2>               hit_count_buffer;
+rtBuffer<unsigned int, 2>               path_length_buffer;
 rtBuffer<float2, 2>               scatter_type_buffer;
 
-rtDeclareVariable(unsigned int,  scatter_sample_type, , );
+//rtDeclareVariable(unsigned int,  scatter_sample_type, , );
 rtDeclareVariable(unsigned int,  need_q_table_update, , );
-rtDeclareVariable(unsigned int,     use_mis, , );
-rtDeclareVariable(unsigned int,     use_soft_q_update, , );
-rtDeclareVariable(unsigned int,     construct_stree, , );
-
-rtBuffer<float3, 3>              point_buffer;
+//rtDeclareVariable(unsigned int,     use_mis, , );
+//rtDeclareVariable(unsigned int,     use_soft_q_update, , );
+//rtDeclareVariable(unsigned int,     construct_stree, , );
+//rtBuffer<float3, 3>              point_buffer;
 
 
 
@@ -86,21 +79,20 @@ RT_PROGRAM void pathtrace_camera()
 {
     size_t2 screen = output_buffer.size();
     float2 inv_screen = 1.0f/make_float2(screen) * 2.f;
-    uint2 screen_index = make_uint2(launch_index.x, launch_index.y);
-    uint sample_index = launch_index.z;
 
-    float2 pixel = make_float2(screen_index) * inv_screen - 1.f;
+    float2 pixel = make_float2(launch_index) * inv_screen - 1.f;
 
-    float2 jitter_scale = inv_screen / sqrt_num_samples;
-    // unsigned int samples_per_pixel = sqrt_num_samples*sqrt_num_samples;
     unsigned int left_samples_pass = samples_per_pass;
     float3 result = make_float3(0.0f);
-    unsigned int completed_frame_number = frame_number;
+
+    // should be larger than 0!
+    unsigned int sample_index_offset = completed_sample_number + 1;
+    unsigned int hit_count = 0;
 
     do
     {
-        unsigned int seed = tea<16>(screen.x*screen.y*sample_index + screen.x*launch_index.y+launch_index.x, completed_frame_number);
-        completed_frame_number += 1;
+        unsigned int seed = tea<16>(screen.x*launch_index.y+launch_index.x, sample_index_offset);
+        sample_index_offset += 1;
 
         // Independent jittering
         float2 jitter = make_float2(rnd(seed), rnd(seed));
@@ -114,42 +106,18 @@ RT_PROGRAM void pathtrace_camera()
 
         // Each iteration is a segment of the ray path.  The closest hit will
         // return new segments to be traced here.
-        float3 radiance = path_trace(ray, seed);
+        PerPathData ppd;
+        path_trace(ray, seed, ppd);
 
-        result += radiance;
+        result += ppd.result;
+        hit_count += dot(ppd.result, ppd.result) > 0 ? 1 : 0;
         // seed = prd.seed;
         // float hit_count = (prd.done && !prd.isMissed) ? 1.0 : 0.0;
         // float hit_count = (prd.done && (length(prd.result) > 0))  ? 1.0 : 0.0;
-
-        // atomicAdd(&hit_count_buffer[screen_index], hit_count);
-        // atomicAdd(&path_length_buffer[screen_index], float(prd.depth));
-        // atomicAdd(&scatter_type_buffer[screen_index].x, prd.valid_scatter_count);
-        // atomicAdd(&scatter_type_buffer[screen_index].y, prd.invalid_scatter_count);
     } while (--left_samples_pass);
 
-    //prd.origin = ray_origin;
-    //prd.direction = ray_direction;
-    //prd.pdf = 0.0f;
-    //prd.specularBounce = false;
-    //
-    // Update the output buffer
-    //
-//    result = result / (result + 1);
-//    float3 old_color = make_float3(output_buffer[screen_index]);
-//    output_buffer[screen_index] = make_float4( old_color * 0.99 + result * 0.01, 1.0f );
-
-    atomicAdd(&output_buffer[screen_index].x,  result.x);
-    atomicAdd(&output_buffer[screen_index].y,  result.y);
-    atomicAdd(&output_buffer[screen_index].z,  result.z);
-    atomicAdd(&output_buffer[screen_index].w,  samples_per_pass);
-
-    //atomicAdd(&output_buffer2[screen_index].x,  result.x * result.x);
-    //atomicAdd(&output_buffer2[screen_index].y,  result.y * result.y);
-    //atomicAdd(&output_buffer2[screen_index].z,  result.z * result.z);
-    //atomicAdd(&output_buffer2[screen_index].w,  samples_per_pass);
-
-    //output_buffer[screen_index] = make_float4( result / samples_per_pass, 1.0 );
-    //output_buffer2[screen_index] = make_float4( result * result / samples_per_pass, 1.0 );
+    output_buffer[launch_index] += make_float4(result, 1.0);
+    hit_count_buffer[launch_index] += hit_count;
 }
 
 
@@ -161,6 +129,6 @@ RT_PROGRAM void pathtrace_camera()
 
 RT_PROGRAM void exception()
 {
-    uint2 screen_index = make_uint2(launch_index.x, launch_index.y);
-    output_buffer[screen_index] = make_float4(bad_color, 1.0f);
+    //int2 screen_index = make_uint2(launch_index.x, launch_index.y);
+    output_buffer[launch_index] = make_float4(bad_color, 1.0f);
 }

@@ -1,31 +1,9 @@
-#include <optixu/optixu_math_namespace.h>
-#include "optix/common/helpers.h"
-#include "optix/common/rt_function.h"
-#include "optix/app_config.h"
-#include "optix/bsdf/bsdf.h"
-#include "optix/light/light_sample.h"
-#include "optix/light/light_pdf.h"
+#include "optix/integrators/common.h"
 
 using namespace optix;
 
-// scene geometry + material + lights
-rtDeclareVariable(rtObject,      top_object, , );
-rtDeclareVariable(rtObject,      top_shadower, , );
-rtBuffer<MaterialParameter> sysMaterialParameters;
-rtBuffer<LightParameter> sysLightParameters;
-
-// path tracer
-rtDeclareVariable(float,         scene_epsilon, , );
-
-rtDeclareVariable(unsigned int,  rr_begin_depth, , );
-rtDeclareVariable(unsigned int,  max_depth, , );
-
-rtDeclareVariable(unsigned int,  pathtrace_ray_type, , );
-rtDeclareVariable(unsigned int,  pathtrace_shadow_ray_type, , );
-
-
-
-RT_FUNCTION float3 path_trace_simple(Ray& ray, unsigned int seed)
+namespace path{
+RT_FUNCTION void path_trace(Ray& ray, unsigned int& seed, PerPathData &ppd)
 {
     float emission_weight = 1.0;
     float3 throughput = make_float3(1.0);
@@ -43,8 +21,8 @@ RT_FUNCTION float3 path_trace_simple(Ray& ray, unsigned int seed)
     LightSample lightSample;
     PerRayData_pathtrace_shadow prd_shadow;
 #endif
-
-    for (int depth = 1; ; depth++){
+    int depth;
+    for (depth = 1; ; depth++){
         // ---------------- Intersection with emitters ----------------
         result += emission_weight * throughput * si.emission;
 
@@ -145,5 +123,9 @@ RT_FUNCTION float3 path_trace_simple(Ray& ray, unsigned int seed)
 #endif
     }
 
-    return result;
+    ppd.result = result;
+    ppd.depth = depth;
+    ppd.is_valid = si.is_valid;
+}
+
 }

@@ -3,6 +3,8 @@ import open3d as o3d
 
 from collections import deque
 import math
+from utils.timing_utils import *
+from queue import Queue
 
 
 class DTree:
@@ -85,21 +87,21 @@ class DTree:
         #     self.visit_count_array[parent_idx] += self.visit_count_array[i]
 
     def visualize_quadtree(self, image_size=512):
-        q = deque()
-        q.append(0)
-        pose_sizes = deque()
-        pose_sizes.append(((0, 0), 1))
+        q = Queue()
+        q.put(0)
+        pose_sizes = Queue()
+        pose_sizes.put(((0, 0), 1))
         result_array = np.zeros((image_size, image_size))
 
-        while len(q) > 0:
-            node = q.pop()
-            origin, size = pose_sizes.pop()
+        while not q.empty():
+            node = q.get()
+            origin, size = pose_sizes.get()
             if self.index_array[node] == 1:
                 for i in range(4):
-                    q.append(self.child(node, i))
+                    q.put(self.child(node, i))
                     nx = origin[0] + 0.5 * (size if i >= 2 else 0)
                     ny = origin[1] + 0.5 * (size if i % 2 == 1 else 0)
-                    pose_sizes.append(((nx, ny), size * 0.5))
+                    pose_sizes.put(((nx, ny), size * 0.5))
             else:
                 sx = int(image_size * origin[0])
                 sy = int(image_size * origin[1])
@@ -123,24 +125,21 @@ class DTree:
         print("Depth array", self.depth_array[0:self.current_size])
         print("Select array", self.select_array[0:self.current_size])
 
+    @timed
     def update(self, threshold=0.01):
-        # if self.uuid == 188:
-        #     print("Before")
-        #     self.print()
-
         if self.current_size == self.max_length:
             return
 
         sum = self.get_total_irradiance()
 
-        q = deque()
-        q.append((0, self.value_array[0], 0))
-        index_array = deque()
-        value_array = deque()
-        depth_array = deque()
+        q = Queue()
+        q.put((0, self.value_array[0], 0))
+        index_array = []
+        value_array = []
+        depth_array = []
         current_size = self.current_size
-        while len(q) > 0:
-            node, val, depth = q.popleft()
+        while not q.empty():
+            node, val, depth = q.get()
             depth_array.append(depth)
             if node < self.current_size:
                 # internal node
@@ -149,14 +148,14 @@ class DTree:
                     value_array.append(0)
                     for i in range(4):
                         child_id = self.child(node, i)
-                        q.append((child_id, self.value_array[node] / 4, depth + 1))
+                        q.put((child_id, self.value_array[node] / 4, depth + 1))
                 # leaf node
                 else:
                     if self.value_array[node] * pow(0.25, depth) >= threshold * sum \
                             and current_size + 4 <= self.max_length:
                         index_array.append(1)
                         for i in range(4):
-                            q.append((current_size + i, self.value_array[node] / 4, depth + 1))
+                            q.put((current_size + i, self.value_array[node] / 4, depth + 1))
                         value_array.append(0)
                         current_size += 4
                     else:
@@ -168,18 +167,11 @@ class DTree:
 
         self.current_size = len(index_array)
         assert current_size == self.current_size
-        #self.index_array[0] = 1
-        self.index_array[0:self.current_size] = np.array(index_array)
-        self.value_array[0:self.current_size] = np.array(value_array)
-        self.depth_array[0:self.current_size] = np.array(depth_array)
+        self.index_array[0:self.current_size] = np.asarray(index_array)
+        self.value_array[0:self.current_size] = np.asarray(value_array)
+        self.depth_array[0:self.current_size] = np.asarray(depth_array)
         self.build_rank_array()
         self.update_parent_radiance()
-
-        # if self.uuid == 188:
-        #     print("After")
-        #     self.print()
-
-
 
     def update_old(self, threshold=0.01):
         # self.update_parent_q_value()

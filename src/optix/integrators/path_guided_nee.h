@@ -25,7 +25,7 @@ rtDeclareVariable(unsigned int,  pathtrace_ray_type, , );
 rtDeclareVariable(unsigned int,  pathtrace_shadow_ray_type, , );
 
 
-RT_FUNCTION float3 path_trace(Ray& ray, unsigned int& seed)
+RT_FUNCTION void path_trace(Ray& ray, unsigned int& seed, PerPathData &ppd)
 {
 
     float3 ray_origins[MAX_NUM_VERTICES];
@@ -169,5 +169,7 @@ RT_FUNCTION float3 path_trace(Ray& ray, unsigned int& seed)
         accumulated_radiance = direct_radiances[i] + current_attenuations[i] * accumulated_radiance;
     }
 
-    return result;
+    ppd.result = result;
+    ppd.depth = depth;
+    ppd.is_valid = si.is_valid;
 }

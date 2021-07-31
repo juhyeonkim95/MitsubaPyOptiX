@@ -5,7 +5,7 @@
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/trash" />
     </content>
-    <orderEntry type="jdk" jdkName="Remote Python 3.7.6 (sftp://juhyeon@147.46.115.111:50125/home/juhyeon/anaconda3/envs/pathtracer/bin/python)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Remote Python 3.8.10 (sftp://juhyeon@147.46.115.111:50125/home/juhyeon/anaconda3/envs/pathtracer3.8/bin/python)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="TestRunnerService">

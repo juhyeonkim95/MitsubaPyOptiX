@@ -4,6 +4,7 @@ from utils.image_utils import load_exr_image
 from PIL import Image
 from pyoptix import TextureSampler, Buffer
 from core.utils.math_utils import srgb_to_linear
+from utils.logging_utils import load_logger
 
 
 def str_to_bool(s):
@@ -28,20 +29,23 @@ def str2_4by4mat(s):
     return ms
 
 
+texture_load_logger = load_logger("Texture Loader")
+
+
 def load_texture_sampler(folder_path, texture_name, gamma=-1):
+    full_path = folder_path + "/" + texture_name
     if texture_name.endswith(".exr"):
-        image = load_exr_image(folder_path + "/" + texture_name)
+        image = load_exr_image(full_path)
     elif texture_name.endswith(".pfm"):
-        image = load_exr_image(folder_path + "/" + texture_name)
+        image = load_exr_image(full_path)
     elif texture_name.endswith(".hdr"):
-        image = load_exr_image(folder_path + "/" + texture_name, True)
+        image = load_exr_image(full_path, True)
     else:
         image = Image.open(folder_path + "/" + texture_name).convert('RGBA')
 
     image_np = np.asarray(image)
 
-    print(image_np.dtype, "Texture type!!!")
-    print(image_np.shape, "Texture shape!!!")
+    texture_load_logger.info("Name: %s , size: %s, dtype %s" % (full_path, str(image_np.shape), str(image_np.dtype)))
     # not linear color space --> need conversion to linear space
     if gamma != 1:
         def def_apply_gamma_rgb(image_rgb):

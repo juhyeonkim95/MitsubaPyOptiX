@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 
 
 class NewLineFormatter(logging.Formatter):

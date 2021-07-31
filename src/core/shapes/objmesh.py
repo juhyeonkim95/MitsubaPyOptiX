@@ -30,3 +30,4 @@ class OBJMesh(InstancedShape):
         np_array["normal_buffer_id"] = self.mesh.geometry['normal_buffer'].get_id()
         np_array["n_triangles"] = self.mesh.n_triangles
         np_array["transformation"] = np.array(self.transform.transpose(), dtype=np.float32)
+        np_array["area"] = 1.0

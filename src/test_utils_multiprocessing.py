@@ -11,7 +11,7 @@ from core.renderer_constants import *
 
 import json
 from utils.image_utils import *
-from utils.io_utils import *
+from utils.result_export_utils import *
 
 from collections import OrderedDict
 
@@ -71,11 +71,11 @@ def process_configs(config):
         "expected_sarsa": Q_UPDATE_EXPECTED_SARSA,
         "mc": Q_UPDATE_MONTE_CARLO
     }
-    if config.get("sample_type") is not None:
-        config["sample_type"] = sample_type_dict[config["sample_type"]]
+    if config.get("sampling_strategy") is not None:
+        config["sampling_strategy"] = sample_type_dict[config["sampling_strategy"]]
     if config.get("q_table_update_method") is not None:
         config["q_table_update_method"] = q_table_update_method_dict[config["q_table_update_method"]]
-    #if config.get("sample_type") == "q_mis_quadtree":
+    #if config.get("sampling_strategy") == "q_mis_quadtree":
     #
     return config
 
@@ -130,10 +130,10 @@ def test_all_using_multiprocessing(config_file_name):
         config_i = config_list[i]
         config_name = config_i.get("name")
         if config_name is None:
-            config_name = config_i["sample_type"]
+            config_name = config_i["sampling_strategy"]
             if "q_table_update_method" in config_i:
                 config_name += ("_" + config_i["q_table_update_method"])
-            if config_i["sample_type"] == "q_mis_quadtree":
+            if config_i["sampling_strategy"] == "q_mis_quadtree":
                 config_name += ("_" + config_i["quad_tree_update_type"])
         config_name_list.append(config_name)
     print("Config names", config_name_list)

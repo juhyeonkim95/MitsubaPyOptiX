@@ -4,11 +4,10 @@ from core.renderer_constants import *
 
 import json
 from utils.image_utils import *
-from utils.io_utils import *
+from utils.result_export_utils import *
 
 from collections import OrderedDict
-
-renderers = {}
+from utils.result_visualize_utils import *
 
 
 def render_using_multiprocessing(config_file_name):
@@ -45,10 +44,10 @@ class MultiProcessingRenderer:
             config_i = self.config_list[i]
             config_name = config_i.get("name")
             if config_name is None:
-                config_name = config_i["sample_type"]
+                config_name = config_i["sampling_strategy"]
                 if "q_table_update_method" in config_i:
                     config_name += ("_" + config_i["q_table_update_method"])
-                if config_i["sample_type"] == "q_mis_quadtree":
+                if config_i["sampling_strategy"] == "q_mis_quadtree":
                     config_name += ("_" + config_i["quad_tree_update_type"])
             self.config_name_list.append(config_name)
         print("Config names", self.config_name_list)
@@ -117,6 +116,7 @@ class MultiProcessingRenderer:
             update_total_result(output_folder)
 
     def render_single_process(self, gpu_id, queue, lock):
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
         from pyoptix import Compiler
@@ -124,6 +124,9 @@ class MultiProcessingRenderer:
         Compiler.keep_device_function = False
         file_dir = os.path.dirname(os.path.abspath(__file__))
         Compiler.add_program_directory(file_dir)
+
+        from path_guiding.directional_quad_tree import initialize_files
+        initialize_files()
 
         from core.renderer import Renderer
 
@@ -165,6 +168,9 @@ class MultiProcessingRenderer:
             for c_name in self.config_name_list:
                 total_results[c_name] = self.rendered_result_dict[scene_name][c_name]
 
+            if self.common_configs.get("show_result", False):
+                show_result_func(total_results)
+
             if "output_folder" in self.json_config:
                 output_folder = self.json_config["output_folder"]
                 scene_output_folder = "%s/%s" % (output_folder, scene_name)
@@ -188,38 +194,8 @@ def process_configs(config):
         "expected_sarsa": Q_UPDATE_EXPECTED_SARSA,
         "mc": Q_UPDATE_MONTE_CARLO
     }
-    if config.get("sample_type") is not None:
-        config["sample_type"] = sample_type_dict[config["sample_type"]]
+    if config.get("sampling_strategy") is not None:
+        config["sampling_strategy"] = sample_type_dict[config["sampling_strategy"]]
     if config.get("q_table_update_method") is not None:
         config["q_table_update_method"] = q_table_update_method_dict[config["q_table_update_method"]]
     return config
-
-
-def export_total_results(total_results, scene_output_folder):
-    # export images
-    if not os.path.exists(scene_output_folder):
-        os.makedirs(scene_output_folder)
-    for k, v in total_results.items():
-        save_pred_images(v['image'], "%s/images/%s" % (scene_output_folder, k))
-
-    # export csv
-    df = pd.DataFrame(total_results)
-
-    def export_list_type(target):
-        target_sequence = df.loc[target]
-        df_target_sequence = pd.DataFrame({key: pd.Series(value) for key, value in target_sequence.items()})
-        df_target_sequence = df_target_sequence.transpose()
-        df_target_sequence.to_csv("%s/%s.csv" % (scene_output_folder, target))
-
-    export_list_type("elapsed_times")
-    export_list_type("hit_count_sequence")
-
-    df.drop(["image", "elapsed_times", "hit_count_sequence"], inplace=True)
-    if "q_table_info" in df:
-        df.drop(["q_table_info"], inplace=True)
-    df.to_csv("%s/result.csv" % scene_output_folder)
-
-    # export json
-    # with open('%s/setting.json' % scene_output_folder, 'w') as fp:
-    #    json.dump(common_params, fp)
-    return df

@@ -4,8 +4,10 @@
       <w>attenuations</w>
       <w>beckmann</w>
       <w>bsdf</w>
+      <w>irradiance</w>
       <w>lookat</w>
       <w>microfacet</w>
+      <w>opti</w>
       <w>optix</w>
       <w>phong</w>
       <w>quadtree</w>
