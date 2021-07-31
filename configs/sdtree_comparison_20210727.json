@@ -8,8 +8,11 @@
     "max_depth": 16,
     "rr_begin_depth":8,
     "uv_n" : 16,
-    "n_cube" : 8,
-    "show_picture" : true
+    "n_cube" : 16,
+    "binary_tree_max_size" : 4096,
+    "max_quadtree_count" : 512,
+    "show_picture" : true,
+    "show_result" : true
   },
   "scene": [
     "cornell-box",
@@ -27,10 +30,10 @@
   ],
   "available_gpu_ids": [0],
   "config_list": [
-    {"sample_type": "brdf"},
+    {"sampling_strategy": "brdf"},
     {
       "name": "binary_tree_cpu_single",
-      "sample_type": "q_mis_quadtree",
+      "sampling_strategy": "q_mis_quadtree",
       "q_table_update_method": "mc",
       "quad_tree_update_type": "cpu_single",
       "directional_mapping_method": "cylindrical",
@@ -41,7 +44,7 @@
     },
     {
       "name": "binary_tree_cpu_multi",
-      "sample_type": "q_mis_quadtree",
+      "sampling_strategy": "q_mis_quadtree",
       "q_table_update_method": "mc",
       "quad_tree_update_type": "cpu_multi",
       "directional_mapping_method": "cylindrical",
@@ -52,7 +55,7 @@
     },
     {
       "name": "binary_tree_gpu",
-      "sample_type": "q_mis_quadtree",
+      "sampling_strategy": "q_mis_quadtree",
       "q_table_update_method": "mc",
       "quad_tree_update_type": "gpu",
       "directional_mapping_method": "cylindrical",
@@ -65,7 +68,7 @@
   "config_list_commented": [
     {
       "name": "grid",
-      "sample_type": "q_mis_quadtree",
+      "sampling_strategy": "q_mis_quadtree",
       "q_table_update_method": "mc",
       "quad_tree_update_type": "gpu",
       "directional_mapping_method": "cylindrical",
@@ -76,7 +79,7 @@
     },
     {
       "name": "binary_tree",
-      "sample_type": "q_mis_quadtree",
+      "sampling_strategy": "q_mis_quadtree",
       "q_table_update_method": "mc",
       "quad_tree_update_type": "gpu",
       "directional_mapping_method": "cylindrical",

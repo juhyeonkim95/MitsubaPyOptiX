@@ -45,17 +45,18 @@ rtBuffer<float, 2>     q_table;
 
 using namespace optix;
 
-struct QuadTree {
-    rtBufferId<unsigned int, 1>     index_array;
-    rtBufferId<unsigned int, 1>     rank_array;
-    rtBufferId<unsigned int, 1>     depth_array;
-    rtBufferId<unsigned int, 1>     select_array;
-    rtBufferId<float, 1>            value_array;
-    uint current_size;
-};
+//struct QuadTree {
+//    rtBufferId<unsigned int, 1>     index_array;
+//    rtBufferId<unsigned int, 1>     rank_array;
+//    rtBufferId<unsigned int, 1>     depth_array;
+//    rtBufferId<unsigned int, 1>     select_array;
+//    rtBufferId<float, 1>            value_array;
+//    uint current_size;
+//};
+//
+//rtBuffer<QuadTree> quad_trees;
 
-rtBuffer<QuadTree> quad_trees;
-
+rtDeclareVariable(float,     quad_tree_update_threshold, , );
 rtDeclareVariable(uint,         launch_index, rtLaunchIndex, );
 
 RT_FUNCTION float get_irradiance(){
@@ -106,8 +107,6 @@ RT_FUNCTION void update_parent_radiance(){
 }
 
 RT_PROGRAM void quad_tree_updater(){
-
-    const float threshold = 0.01f;
     float total_irradiance = get_irradiance();
     uint current_size = dtree_current_size_array[launch_index];
     uint current_size_original = current_size;
@@ -167,7 +166,7 @@ RT_PROGRAM void quad_tree_updater(){
                 float local_irradiance = value * pow(0.25, depth);
                 // (local_irradiance > total_irradiance * threshold) &&
 
-                if((local_irradiance > total_irradiance * threshold) && (current_size + 4 <= MAX_QUADTREE_SIZE)){
+                if((local_irradiance > total_irradiance * quad_tree_update_threshold) && (current_size + 4 <= MAX_QUADTREE_SIZE)){
                     index_array[current_array_size] = 1;
                     value_array[current_array_size] = 0.0f;
                     current_array_size += 1;

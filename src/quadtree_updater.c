@@ -73,10 +73,10 @@ void update_quadtree_single(
     unsigned int **dtree_select_array,
     float **dtree_value_array,
     unsigned int *dtree_current_size_array,
-    unsigned int launch_index
+    unsigned int launch_index,
+    float threshold
 )
 {
-    const float threshold = 0.01f;
     float total_irradiance = get_total_irradiance(dtree_index_array, dtree_rank_array, dtree_depth_array, dtree_select_array, dtree_value_array, dtree_current_size_array, launch_index);
     unsigned int current_size = dtree_current_size_array[launch_index];
     unsigned int current_size_original = current_size;
@@ -179,10 +179,11 @@ void update_quadtree(
     unsigned int **dtree_select_array,
     float **dtree_value_array,
     unsigned int *dtree_current_size_array,
-    unsigned int n_s
+    unsigned int n_s,
+    float threshold
 ){
     for(int i=0; i<n_s; i++){
-        update_quadtree_single(dtree_index_array, dtree_rank_array, dtree_depth_array, dtree_select_array,dtree_value_array,dtree_current_size_array,i);
+        update_quadtree_single(dtree_index_array, dtree_rank_array, dtree_depth_array, dtree_select_array,dtree_value_array,dtree_current_size_array,i, threshold);
     }
 }
 
@@ -193,11 +194,12 @@ void update_quadtree_multi(
     unsigned int **dtree_select_array,
     float **dtree_value_array,
     unsigned int *dtree_current_size_array,
-    unsigned int n_s
+    unsigned int n_s,
+    float threshold
 ){
 #pragma omp parallel for
     for(int i=0; i<n_s; i++){
-        update_quadtree_single(dtree_index_array, dtree_rank_array, dtree_depth_array, dtree_select_array,dtree_value_array,dtree_current_size_array,i);
+        update_quadtree_single(dtree_index_array, dtree_rank_array, dtree_depth_array, dtree_select_array,dtree_value_array,dtree_current_size_array,i,threshold);
     }
 }
 

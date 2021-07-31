@@ -1,11 +1,9 @@
-from pyoptix import Context, Program, Material
+from pyoptix import Context, Buffer
 from core.scene import Scene
-from core.renderer_utils import *
 import time
 from core.utils.math_utils import *
 import matplotlib.pyplot as plt
 
-from path_guiding.quadtree import *
 from core.renderer_constants import *
 from path_guiding.radiance_record import QTable
 from utils.logging_utils import *
@@ -88,9 +86,7 @@ class Renderer:
             max_depth=8,
             rr_begin_depth=4,
             uv_n=8,
-            n_cube=32,
-            spatial_type='grid',
-            directional_type='grid',
+            n_cube=16,
             directional_mapping_method="equal_area",
             use_bsdf_first_force=True,
             force_update_q_table=False,
@@ -98,7 +94,6 @@ class Renderer:
             min_epsilon=0.0,
             no_exploration=False,
             convert_ldr=True,
-            quad_tree_update_type='gpu',
             **kwargs
     ):
         # load scene info & init optix
@@ -133,12 +128,8 @@ class Renderer:
         q_table = None
         if need_q_table_update:
             q_table = QTable(
-                spatial_type=spatial_type,
-                directional_type=directional_type,
                 directional_mapping_method=directional_mapping_method,
-                accumulative_q_table_update=accumulative_q_table_update,
-                n_cube=n_cube, n_uv=uv_n, octree=self.scene_octree,
-                quad_tree_update_type=quad_tree_update_type
+                accumulative_q_table_update=accumulative_q_table_update, **kwargs
             )
             q_table.register_to_context(context)
 
@@ -200,8 +191,7 @@ class Renderer:
                     # Update/refine radiance record if needed
                     if need_q_table_update and completed_samples >= counter_sample_next_q_table_update:
                         with record_elapsed_time("Q table update time", list_time_q_table_update, self.render_logger):
-                            q_table.update_pdf(context, epsilon, sampling_strategy is SAMPLE_Q_SPHERE,
-                                               quad_tree_update_type, k=counter_q_table_update, **kwargs)
+                            q_table.update_pdf(context, k=counter_q_table_update, **kwargs)
                         if learning_method == "exponential":
                             counter_sample_exponential_update_size *= 2
                             counter_sample_next_q_table_update += counter_sample_exponential_update_size
@@ -300,9 +290,7 @@ class Renderer:
 
         if need_q_table_update:
             results["q_table_info"] = q_table
-            results["invalid_sample_rate"] = q_table.get_invalid_sample_rate(context)
-        else:
-            results["invalid_sample_rate"] = 0
+
 
         self.render_logger.info("[Rendering complete]")
         for key, v in results.items():

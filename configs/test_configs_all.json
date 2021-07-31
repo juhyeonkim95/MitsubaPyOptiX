@@ -15,29 +15,29 @@
   ],
   "available_gpu_ids": [0,3,6],
   "config_list": [
-    {"sample_type": "brdf"},
-    {"sample_type": "q_brdf_inv", "q_table_update_method": "sarsa"},
-    {"sample_type": "q_brdf_inv", "q_table_update_method": "expected_sarsa"},
-    {"sample_type": "q_brdf_inv", "q_table_update_method": "mc"},
+    {"sampling_strategy": "brdf"},
+    {"sampling_strategy": "q_brdf_inv", "q_table_update_method": "sarsa"},
+    {"sampling_strategy": "q_brdf_inv", "q_table_update_method": "expected_sarsa"},
+    {"sampling_strategy": "q_brdf_inv", "q_table_update_method": "mc"},
 
-    {"sample_type": "q_brdf_rej", "q_table_update_method": "sarsa"},
-    {"sample_type": "q_brdf_rej", "q_table_update_method": "expected_sarsa"},
-    {"sample_type": "q_brdf_rej", "q_table_update_method": "mc"},
+    {"sampling_strategy": "q_brdf_rej", "q_table_update_method": "sarsa"},
+    {"sampling_strategy": "q_brdf_rej", "q_table_update_method": "expected_sarsa"},
+    {"sampling_strategy": "q_brdf_rej", "q_table_update_method": "mc"},
 
-    {"sample_type": "q_brdf_rej_mix", "q_table_update_method": "sarsa"},
-    {"sample_type": "q_brdf_rej_mix", "q_table_update_method": "expected_sarsa"},
-    {"sample_type": "q_brdf_rej_mix", "q_table_update_method": "mc"},
+    {"sampling_strategy": "q_brdf_rej_mix", "q_table_update_method": "sarsa"},
+    {"sampling_strategy": "q_brdf_rej_mix", "q_table_update_method": "expected_sarsa"},
+    {"sampling_strategy": "q_brdf_rej_mix", "q_table_update_method": "mc"},
 
-    {"sample_type": "q_brdf_mcmc", "q_table_update_method": "sarsa"},
-    {"sample_type": "q_brdf_mcmc", "q_table_update_method": "expected_sarsa"},
-    {"sample_type": "q_brdf_mcmc", "q_table_update_method": "mc"},
+    {"sampling_strategy": "q_brdf_mcmc", "q_table_update_method": "sarsa"},
+    {"sampling_strategy": "q_brdf_mcmc", "q_table_update_method": "expected_sarsa"},
+    {"sampling_strategy": "q_brdf_mcmc", "q_table_update_method": "mc"},
 
-    {"sample_type": "q_mis_sphere", "q_table_update_method": "sarsa", "bsdf_sampling_fraction": 0.5},
-    {"sample_type": "q_mis_sphere", "q_table_update_method": "expected_sarsa", "bsdf_sampling_fraction": 0.5},
-    {"sample_type": "q_mis_sphere", "q_table_update_method": "mc", "bsdf_sampling_fraction": 0.5},
+    {"sampling_strategy": "q_mis_sphere", "q_table_update_method": "sarsa", "bsdf_sampling_fraction": 0.5},
+    {"sampling_strategy": "q_mis_sphere", "q_table_update_method": "expected_sarsa", "bsdf_sampling_fraction": 0.5},
+    {"sampling_strategy": "q_mis_sphere", "q_table_update_method": "mc", "bsdf_sampling_fraction": 0.5},
 
     {
-      "sample_type": "q_mis_quadtree",
+      "sampling_strategy": "q_mis_quadtree",
       "q_table_update_method": "mc",
       "quad_tree_update_type": "cpu_single",
       "directional_mapping_method": "cylindrical",
@@ -47,7 +47,7 @@
     },
 
     {
-      "sample_type": "q_mis_quadtree",
+      "sampling_strategy": "q_mis_quadtree",
       "q_table_update_method": "mc",
       "quad_tree_update_type": "gpu",
       "directional_mapping_method": "cylindrical",
@@ -59,7 +59,7 @@
   "config_list_commented": [
 
     {
-      "sample_type": "q_mis_quadtree",
+      "sampling_strategy": "q_mis_quadtree",
       "q_table_update_method": "mc",
       "quad_tree_update_type": "cpu_single",
       "directional_mapping_method": "cylindrical",
@@ -68,7 +68,7 @@
       "bsdf_sampling_fraction": 0.5
     },
     {
-      "sample_type": "q_mis_quadtree",
+      "sampling_strategy": "q_mis_quadtree",
       "q_table_update_method": "mc",
       "quad_tree_update_type": "cpu_multi",
       "directional_mapping_method": "cylindrical",
@@ -77,7 +77,7 @@
       "bsdf_sampling_fraction": 0.5
     },
     {
-      "sample_type": "q_mis_quadtree",
+      "sampling_strategy": "q_mis_quadtree",
       "q_table_update_method": "mc",
       "quad_tree_update_type": "gpu",
       "directional_mapping_method": "cylindrical",

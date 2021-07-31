@@ -26,15 +26,15 @@
   ],
   "available_gpu_ids": [0,1,2,3,4,5,6,7],
   "config_list": [
-    {"sample_type": "brdf"},
+    {"sampling_strategy": "brdf"},
 
-    {"sample_type": "q_brdf_rej_mix", "q_table_update_method": "sarsa"},
-    {"sample_type": "q_brdf_rej_mix", "q_table_update_method": "expected_sarsa"},
-    {"sample_type": "q_brdf_rej_mix", "q_table_update_method": "mc"},
+    {"sampling_strategy": "q_brdf_rej_mix", "q_table_update_method": "sarsa"},
+    {"sampling_strategy": "q_brdf_rej_mix", "q_table_update_method": "expected_sarsa"},
+    {"sampling_strategy": "q_brdf_rej_mix", "q_table_update_method": "mc"},
 
     {
       "name": "grid",
-      "sample_type": "q_mis_quadtree",
+      "sampling_strategy": "q_mis_quadtree",
       "q_table_update_method": "mc",
       "quad_tree_update_type": "gpu",
       "directional_mapping_method": "cylindrical",
@@ -46,7 +46,7 @@
   ,
     {
       "name": "binary_tree",
-      "sample_type": "q_mis_quadtree",
+      "sampling_strategy": "q_mis_quadtree",
       "q_table_update_method": "mc",
       "quad_tree_update_type": "gpu",
       "directional_mapping_method": "cylindrical",

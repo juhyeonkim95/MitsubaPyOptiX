@@ -8,6 +8,7 @@ import pandas as pd
 import json
 from utils.result_visualize_utils import *
 
+
 def show_radiance_map(scene_name, scale=4):
     reference_parent_folder = '../reference_images/%s/scale_%d' % ("standard", scale)
     ref_image = load_reference_image(reference_parent_folder, scene_name)
@@ -59,7 +60,7 @@ def test_single_scene(scene_name,
         # You should change q_table_old at getQValue to q_table
         'accumulative_q_table_update': True,
         'uv_n': 16,
-        'n_cube': 8,
+        'n_cube': 16,
         'use_mis': False
     }
 
@@ -74,24 +75,23 @@ def test_single_scene(scene_name,
 
     def test_2():
         common_params2 = {
-            "sampling_strategy" : SAMPLE_Q_QUADTREE,
-            "directional_mapping_method" : "cylindrical",
-            "directional_type" : "quadtree",
-            "learning_method" : "exponential",
+            "sampling_strategy": SAMPLE_Q_QUADTREE,
+            "directional_mapping_method": "cylindrical",
+            "directional_data_structure_type": "quadtree",
+            "learning_method": "exponential",
             "bsdf_sampling_fraction": 0.5,
             "q_table_update_method": Q_UPDATE_MONTE_CARLO,
             "binary_tree_split_sample_number": 12000
         }
         common_params_total = {**common_params, **common_params2}
-        common_params_total['spatial_type'] = 'binary_tree'
+        common_params_total['spatial_data_structure_type'] = 'binary_tree'
         total_results["binary_tree_cpu_single"] = renderer.render(**common_params_total, quad_tree_update_type='cpu_single')
         #total_results["binary_tree_cpu_multi"] = renderer.render(**common_params_total, quad_tree_update_type='cpu_multi')
         #total_results["binary_tree_gpu"] = renderer.render(**common_params_total, quad_tree_update_type='gpu')
-        #common_params_total['spatial_type'] = 'grid'
+        #common_params_total['spatial_data_structure_type'] = 'grid'
         #total_results["grid_cpu_single"] = renderer.render(**common_params_total, quad_tree_update_type='cpu_single')
         #total_results["grid_cpu_multi"] = renderer.render(**common_params_total, quad_tree_update_type='cpu_multi')
         #total_results["grid_gpu"] = renderer.render(**common_params_total, quad_tree_update_type='gpu')
-
 
     if test_target == 2:
         test_2()

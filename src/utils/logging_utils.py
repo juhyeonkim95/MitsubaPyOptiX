@@ -22,7 +22,13 @@ class NewLineFormatter(logging.Formatter):
 		return msg
 
 
+logger_set = {}
+
+
 def load_logger(name):
+	if name in logger_set:
+		return logger_set[name]
+
 	logger = logging.getLogger(name)
 	logger.propagate = False
 	formatter = NewLineFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -30,5 +36,6 @@ def load_logger(name):
 	stream_handler = logging.StreamHandler()
 	stream_handler.setFormatter(formatter)
 	logger.addHandler(stream_handler)
-
+	logger.setLevel(logging.INFO)
+	logger_set[name] = logger
 	return logger

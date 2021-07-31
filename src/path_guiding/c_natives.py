@@ -33,7 +33,8 @@ update_quadtree_native.argtypes = [
 	_doublepp,
 	_doublepp,
 	ndpointer(dtype=ctypes.c_uint32, flags='C_CONTIGUOUS'),
-	ctypes.c_uint32
+	ctypes.c_uint32,
+	ctypes.c_float
 ]
 
 update_quadtree_multi_native = c_lib.update_quadtree_multi
@@ -45,7 +46,8 @@ update_quadtree_multi_native.argtypes = [
 	_doublepp,
 	_doublepp,
 	ndpointer(dtype=ctypes.c_uint32, flags='C_CONTIGUOUS'),
-	ctypes.c_uint32
+	ctypes.c_uint32,
+	ctypes.c_float
 ]
 
 update_binary_tree_native = c_lib.update_binary_tree_native

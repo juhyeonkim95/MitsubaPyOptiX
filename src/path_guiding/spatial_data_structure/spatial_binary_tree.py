@@ -8,6 +8,7 @@ import copy
 
 from utils.timing_utils import timed
 from path_guiding.c_natives import *
+from path_guiding.spatial_data_structure.spatial_data_structure import SpatialDataStructure
 
 
 class Box:
@@ -70,15 +71,17 @@ def plot_cube(ax, cube_definition):
     # ax.set_aspect('equal')
 
 
-class SpatialAdaptiveBinaryTree:
+class SpatialAdaptiveBinaryTree(SpatialDataStructure):
     """
     Implement spatial binary tree in SOA (Structure of Arrays) style
     """
-    def __init__(self, max_leaf_node_number=4096, initial_subdivision=0):
-        self.max_leaf_node_number = max_leaf_node_number
+    def __init__(self, q_table, **kwargs):
+        super().__init__()
+        self.q_table = q_table
+        self.max_leaf_node_number = kwargs.get("binary_tree_max_size", 4096)
         self.leaf_node_number = 1
-        max_total_size = 2 * max_leaf_node_number - 1
-        self.visit_count_array = np.zeros((max_leaf_node_number,), dtype=np.uint32)
+        max_total_size = 2 * self.max_leaf_node_number - 1
+        self.visit_count_array = np.zeros((self.max_leaf_node_number,), dtype=np.uint32)
         self.axis_array = np.zeros((max_total_size,), dtype=np.uint32)
 
         # store only first child index, assume children are in consecutive sequence.
@@ -86,10 +89,20 @@ class SpatialAdaptiveBinaryTree:
         self.parent_array = np.zeros((max_total_size,), dtype=np.uint32)
         self.leaf_node_index_array = np.zeros((max_total_size,), dtype=np.uint32)
 
-        for i in range(initial_subdivision):
+        for i in range(kwargs.get("initial_subdivision", 0)):
             self.subdivide_all()
 
-        print("Initial Size", self.leaf_node_number)
+    def __str__(self):
+        logs = ["[Spatial Data Structure]"]
+        logs += ["\t- type : %s" % "Binary Tree"]
+        logs += ["\t- max_leaf_node_number : %s" % str(self.max_leaf_node_number)]
+        return "\n".join(logs)
+
+    def get_max_size(self):
+        return self.max_leaf_node_number
+
+    def get_size(self):
+        return self.leaf_node_number
 
     def print(self):
         print("Child Array", self.child_array[0:self.leaf_node_number])
@@ -159,7 +172,6 @@ class SpatialAdaptiveBinaryTree:
             self.max_leaf_node_number
         )
         print("After leaf node", self.leaf_node_number)
-
 
     @timed
     def refine(self, threshold, invalid_rates=None, invalid_rate_threshold=0):
@@ -258,7 +270,7 @@ class SpatialAdaptiveBinaryTree:
         context["stree_axis_array"].copy_to_array(self.axis_array)
         context["stree_visit_count"].copy_to_array(self.visit_count_array)
 
-    def create_buffer_to_context(self, context):
+    def create_optix_buffer(self, context):
         context["stree_child_array"] = Buffer.from_array(self.child_array, buffer_type='io', drop_last_dim=False)
         context["stree_parent_array"] = Buffer.from_array(self.parent_array, buffer_type='io', drop_last_dim=False)
         context["stree_axis_array"] = Buffer.from_array(self.axis_array, buffer_type='io', drop_last_dim=False)
@@ -268,10 +280,9 @@ class SpatialAdaptiveBinaryTree:
 
     def visualize(self, invalid_rates=None):
         boxes = []
-        for i in range(self.leaf_node_number):
-            if i == 0:
-                boxes.append(Box())
-                continue
+        total_node_number = 2 * self.leaf_node_number - 1
+        boxes.append(Box())
+        for i in range(1, total_node_number, 1):
             parent_index = self.parent_array[i]
             parent_box = boxes[parent_index]
             child_box = copy.deepcopy(parent_box)
@@ -295,9 +306,10 @@ class SpatialAdaptiveBinaryTree:
         red = np.array([1, 0, 0], dtype=np.float32)
         green = np.array([0, 1, 0], dtype=np.float32)
 
-        for i in range(self.leaf_node_number):
+        for i in range(total_node_number):
             if self.is_leaf(i):
-                points.append((boxes[i].s + boxes[i].e) * 0.5)
+                center = (boxes[i].s + boxes[i].e) * 0.5
+                points.append(center)
 
                 if invalid_rates is not None:
                     invalid_rate = invalid_rates[i]
@@ -309,7 +321,7 @@ class SpatialAdaptiveBinaryTree:
                 else:
                     color = red
                 colors.append(color)
-                scale = self.visit_count_array[i] / np.max(self.visit_count_array) * 30
+                scale = self.visit_count_array[self.leaf_node_index_array[i]] / (np.max(self.visit_count_array) + 1) * 30
                 scales.append(scale)
 
                 #scatter_cube(ax, boxes[i].s, boxes[i].e)

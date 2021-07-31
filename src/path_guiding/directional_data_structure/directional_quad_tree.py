@@ -1,6 +1,5 @@
-import numpy as np
-from path_guiding.quadtree import DTree
-import multiprocessing
+from path_guiding.directional_data_structure.directional_data_structure import DirectionalDataStructure
+
 from pyoptix import Buffer
 import copy
 from queue import Queue
@@ -8,26 +7,36 @@ from utils.timing_utils import *
 from path_guiding.c_natives import *
 
 
-class DirectionalQuadTree:
+class DirectionalQuadTree(DirectionalDataStructure):
     """
     Implement directional quadtrees in SOA (Structure of Arrays) style
     """
-    def __init__(self, value_array, max_size=10000, quad_tree_update_type='cpu_single'):
-        n_s = len(value_array)
-        self.n_s = n_s
-        self.max_size = max_size
-
-        self.dtree_index_array = np.zeros((n_s, max_size), dtype=np.uint32)
-        self.dtree_rank_array = np.zeros((n_s, max_size), dtype=np.uint32)
-        self.dtree_depth_array = np.zeros((n_s, max_size), dtype=np.uint32)
-        self.dtree_select_array = np.zeros((n_s, max_size), dtype=np.uint32)
-        self.dtree_value_array = np.copy(value_array).astype(np.float32)
+    def __init__(self, q_table, **kwargs):
+        super().__init__()
+        n_s = q_table.spatial_data_structure.get_max_size()
+        self.max_size = kwargs.get("max_size", 512)
+        self.dtree_index_array = np.zeros((n_s, self.max_size), dtype=np.uint32)
+        self.dtree_rank_array = np.zeros((n_s, self.max_size), dtype=np.uint32)
+        self.dtree_depth_array = np.zeros((n_s, self.max_size), dtype=np.uint32)
+        self.dtree_select_array = np.zeros((n_s, self.max_size), dtype=np.uint32)
         self.current_sizes = np.ones((n_s, ), dtype=np.uint32)
+        self.q_table = q_table
+        self.quadtree_update_type = kwargs.get("quad_tree_update_type", "gpu")
+
+    def get_size(self):
+        return self.max_size
+
+    def __str__(self):
+        logs = ["[Directional Data Structure]"]
+        logs += ["\t- type : %s" % "Quad tree"]
+        logs += ["\t- max_size : %s" % str(self.max_size)]
+        logs += ["\t- quadtree_update_type : %s" % str(self.quadtree_update_type)]
+        return "\n".join(logs)
 
     def print(self, index):
         current_size = self.current_sizes[index]
         print("Size", current_size)
-        print("Value array", self.dtree_value_array[index, 0:current_size])
+        print("Value array", self.q_table.q_table[index, 0:current_size])
         print("Index array", self.dtree_index_array[index, 0:current_size])
         print("Rank array", self.dtree_rank_array[index, 0:current_size])
         print("Depth array", self.dtree_depth_array[index, 0:current_size])
@@ -38,7 +47,7 @@ class DirectionalQuadTree:
         area = 0
         current_size = self.current_sizes[index]
         index_array = self.dtree_index_array[index]
-        value_array = self.dtree_value_array[index]
+        value_array = self.q_table.q_table[index]
         depth_array = self.dtree_depth_array[index]
 
         for i in range(current_size):
@@ -73,7 +82,7 @@ class DirectionalQuadTree:
 
     def update_parent_radiance(self, index):
         current_size = self.current_sizes[index]
-        value_array = self.dtree_value_array[index]
+        value_array = self.q_table.q_table[index]
         index_array = self.dtree_index_array[index]
         select_array = self.dtree_select_array[index]
 
@@ -90,7 +99,7 @@ class DirectionalQuadTree:
         if current_size == self.max_size:
             return
 
-        value_array = self.dtree_value_array[index]
+        value_array = self.q_table.q_table[index]
         index_array = self.dtree_index_array[index]
         rank_array = self.dtree_rank_array[index]
 
@@ -136,7 +145,7 @@ class DirectionalQuadTree:
         new_size = len(new_index_array)
 
         self.dtree_index_array[index, 0:new_size] = np.asarray(new_index_array)
-        self.dtree_value_array[index, 0:new_size] = np.asarray(new_value_array)
+        self.q_table.q_table[index, 0:new_size] = np.asarray(new_value_array)
         self.dtree_depth_array[index, 0:new_size] = np.asarray(new_depth_array)
         self.current_sizes[index] = new_size
 
@@ -150,57 +159,47 @@ class DirectionalQuadTree:
             self.dtree_rank_array[d] = np.copy(self.dtree_rank_array[s])
             self.dtree_select_array[d] = np.copy(self.dtree_select_array[s])
             self.dtree_depth_array[d] = np.copy(self.dtree_depth_array[s])
-            self.dtree_value_array[d] = np.copy(self.dtree_value_array[s])
+            self.q_table.q_table[d] = np.copy(self.q_table.q_table[s])
             self.current_sizes[d] = self.current_sizes[s]
 
-    def refine(self, context, n_s, value_array, quad_tree_update_type='gpu', threshold=0.01):
-        if 'cpu' in quad_tree_update_type:
-            self.dtree_value_array[:] = value_array[:]
+    def refine(self, context, n_s, threshold=0.01):
+        if 'cpu' in self.quadtree_update_type:
             # (1) refine quadtree with single thread
-            if n_s == 1 or quad_tree_update_type == "cpu_single":
+            if n_s == 1 or self.quadtree_update_type == "cpu_single":
                 update_quadtree_native(pp(self.dtree_index_array), pp(self.dtree_rank_array), pp(self.dtree_depth_array),
-                                       pp(self.dtree_select_array), pp(self.dtree_value_array),
-                                       self.current_sizes, self.n_s)
+                                       pp(self.dtree_select_array), pp(self.q_table.q_table),
+                                       self.current_sizes, n_s, threshold)
 
             # (2) refine quadtree with multiprocessing
-            elif quad_tree_update_type == "cpu_multi":
+            elif self.quadtree_update_type == "cpu_multi":
                 update_quadtree_multi_native(pp(self.dtree_index_array), pp(self.dtree_rank_array), pp(self.dtree_depth_array),
-                                             pp(self.dtree_select_array), pp(self.dtree_value_array),
-                                             self.current_sizes, self.n_s)
-
-            #context['q_table'].copy_from_array(self.dtree_value_array)
-            #self.copy_to_context(context)
+                                             pp(self.dtree_select_array), pp(self.q_table.q_table),
+                                             self.current_sizes, n_s, threshold)
 
         # (3) use gpu
-        elif quad_tree_update_type == "gpu":
+        elif self.quadtree_update_type == "gpu":
+            # upload q table info to GPU
+            context["q_table"].copy_from_array(self.q_table.q_table)
+            context["quad_tree_update_threshold"] = np.array(threshold, dtype=np.float32)
             context.launch(1, n_s)
-
 
     def copy_to_context(self, context):
         context["dtree_index_array"].copy_from_array(self.dtree_index_array)
         context["dtree_rank_array"].copy_from_array(self.dtree_rank_array)
         context["dtree_depth_array"].copy_from_array(self.dtree_depth_array)
         context["dtree_select_array"].copy_from_array(self.dtree_select_array)
-        dtree_current_size_array = np.zeros((self.n_s, ), dtype=np.uint32)
-        for i in range(self.n_s):
-            dtree_current_size_array[i] = self.current_sizes[i]
-        context["dtree_current_size_array"].copy_from_array(dtree_current_size_array)
+        context["dtree_current_size_array"].copy_from_array(self.current_sizes)
 
     def copy_from_context(self, context):
         context["dtree_index_array"].copy_to_array(self.dtree_index_array)
         context["dtree_rank_array"].copy_to_array(self.dtree_rank_array)
         context["dtree_depth_array"].copy_to_array(self.dtree_depth_array)
         context["dtree_select_array"].copy_to_array(self.dtree_select_array)
-        current_size_array = context["dtree_current_size_array"].to_array()
-        for i in range(self.n_s):
-            #if current_size_array[i] != self.dtrees[i].current_size:
-            #   print("%d Size before %d after %d"% (i, self.dtrees[i].current_size, current_size_array[i]))
-            self.current_sizes[i] = current_size_array[i]
+        context["dtree_current_size_array"].copy_to_array(self.current_sizes)
 
-    def create_buffer_to_context(self, context):
+    def create_optix_buffer(self, context):
         context['dtree_index_array'] = Buffer.from_array(self.dtree_index_array, buffer_type='io', drop_last_dim=False)
         context['dtree_rank_array'] = Buffer.from_array(self.dtree_rank_array, buffer_type='io', drop_last_dim=False)
         context['dtree_depth_array'] = Buffer.from_array(self.dtree_depth_array, buffer_type='io', drop_last_dim=False)
         context['dtree_select_array'] = Buffer.from_array(self.dtree_select_array, buffer_type='io', drop_last_dim=False)
-        current_size_array = np.ones((self.n_s,), dtype=np.uint32)
-        context['dtree_current_size_array'] = Buffer.from_array(current_size_array, buffer_type='io', drop_last_dim=False)
+        context['dtree_current_size_array'] = Buffer.from_array(self.current_sizes, buffer_type='io', drop_last_dim=False)
