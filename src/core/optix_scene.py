@@ -4,6 +4,30 @@ import numpy as np
 from core.textures.texture import Texture
 from core.bsdfs.bsdf import BSDF
 from core.emitters.emitter import Emitter
+from core.renderer_constants import *
+
+
+def update_optix_configs(config_file_path="optix/app_config.h", **kwargs):
+    with open(config_file_path, "r") as f:
+        list_of_lines = f.readlines()
+
+    def change_to_int(key):
+        return key_value_to_int(key, kwargs.get(key))
+
+    for i in range(len(list_of_lines)):
+        if list_of_lines[i].startswith("#define SAMPLING_STRATEGY "):
+            list_of_lines[i] = "#define SAMPLING_STRATEGY %d\n" % change_to_int("sampling_strategy")
+        if list_of_lines[i].startswith("#define Q_UPDATE_METHOD "):
+            list_of_lines[i] = "#define Q_UPDATE_METHOD %d\n" % change_to_int("q_table_update_method")
+        if list_of_lines[i].startswith("#define SPATIAL_DATA_STRUCTURE_TYPE "):
+            list_of_lines[i] = "#define SPATIAL_DATA_STRUCTURE_TYPE %d\n" % change_to_int("spatial_data_structure_type")
+        if list_of_lines[i].startswith("#define DIRECTIONAL_DATA_STRUCTURE_TYPE "):
+            list_of_lines[i] = "#define DIRECTIONAL_DATA_STRUCTURE_TYPE %d\n" % change_to_int("directional_data_structure_type")
+        if list_of_lines[i].startswith("#define DIRECTION_UV_MAPPING_TYPE "):
+            list_of_lines[i] = "#define DIRECTION_UV_MAPPING_TYPE %d\n" % change_to_int("directional_mapping_method")
+
+    with open(config_file_path, "w") as f:
+        f.writelines(list_of_lines)
 
 
 class OptiXSceneContext:
@@ -33,12 +57,16 @@ class OptiXSceneContext:
     def init_optix_context(self):
         context = self.context
         context.set_ray_type_count(2)
-        context.set_entry_point_count(2)
+        context.set_entry_point_count(1)
 
         context['pathtrace_ray_type'] = np.array(0, dtype=np.uint32)
         context['pathtrace_shadow_ray_type'] = np.array(1, dtype=np.uint32)
         context['bad_color'] = np.array([1000000., 0., 1000000.], dtype=np.float32)
         context['bg_color'] = np.zeros(3, dtype=np.float32)
+
+    def update_program(self):
+        self.program_dictionary["ray_generation"] = Program('optix/programs/path_trace_camera.cu', 'pathtrace_camera')
+        self.context.set_ray_generation_program(0, self.program_dictionary['ray_generation'])
 
     def init_optix_programs(self):
         program_dictionary = {}
@@ -79,6 +107,9 @@ class OptiXSceneContext:
 
         self.program_dictionary = program_dictionary
 
+        self.context.set_ray_generation_program(0, self.program_dictionary['ray_generation'])
+        self.context.set_exception_program(0, self.program_dictionary['exception'])
+
     def init_optix_materials(self):
         material_dict = {}
         program_dictionary = self.program_dictionary
@@ -107,11 +138,10 @@ class OptiXSceneContext:
         else:
             miss_program = self.program_dictionary["miss"]
 
-        self.context.set_ray_generation_program(0, self.program_dictionary['ray_generation'])
-        self.context.set_exception_program(0, self.program_dictionary['exception'])
+        # self.context.set_ray_generation_program(0, self.program_dictionary['ray_generation'])
+        # self.context.set_exception_program(0, self.program_dictionary['exception'])
         self.context.set_miss_program(0, miss_program)
-
-        self.context.set_ray_generation_program(1, self.program_dictionary["quad_tree_updater"])
+        # self.context.set_ray_generation_program(1, self.program_dictionary["quad_tree_updater"])
 
     def init_optix_scene(self, scene:Scene):
         """

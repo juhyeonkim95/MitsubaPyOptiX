@@ -99,21 +99,21 @@ def export_radiance(scene_name, scale=4, n_uvs=None, render_reference=True, expo
         common_params["_spp"] = 1024
         common_params["uv_n"] = n_uv
         total_result["expected_sarsa"] = renderer.render(**common_params,
-                                                         sampling_strategy=SAMPLE_COSINE,
-                                                         force_update_q_table=True,
-                                                         q_table_update_method=SAMPLE_COSINE)
+														 sampling_strategy=SAMPLE_BRDF,
+														 force_update_q_table=True,
+														 q_table_update_method=SAMPLE_BRDF)
         total_result["monte_carlo"] = renderer.render(**common_params,
-                                                      sampling_strategy=SAMPLE_COSINE,
-                                                      force_update_q_table=True,
-                                                      q_table_update_method=Q_UPDATE_MONTE_CARLO)
+													  sampling_strategy=SAMPLE_BRDF,
+													  force_update_q_table=True,
+													  q_table_update_method=Q_UPDATE_MONTE_CARLO)
         total_result["sarsa"] = renderer.render(**common_params,
-                                                sampling_strategy=SAMPLE_COSINE,
-                                                force_update_q_table=True,
-                                                q_table_update_method=Q_UPDATE_SARSA)
+												sampling_strategy=SAMPLE_BRDF,
+												force_update_q_table=True,
+												q_table_update_method=Q_UPDATE_SARSA)
         total_result["sarsa2"] = renderer.render(**common_params,
-                                                 sampling_strategy=SAMPLE_COSINE,
-                                                 force_update_q_table=True,
-                                                 q_table_update_method=Q_UPDATE_SARSA2)
+												 sampling_strategy=SAMPLE_BRDF,
+												 force_update_q_table=True,
+												 q_table_update_method=Q_UPDATE_SARSA2)
 
         # result = renderer.render(**common_params,
         #                          sampling_strategy=SAMPLE_COSINE,
@@ -225,7 +225,7 @@ def test2(scene_name, scale=4, test_time=False, show_picture=False, show_result=
     common_params['time_limit_init_ignore_step'] = 10
 
     total_results["uniform"] = renderer.render(**common_params, sampling_strategy=SAMPLE_UNIFORM)
-    total_results["brdf"] = renderer.render(**common_params, sampling_strategy=SAMPLE_COSINE)
+    total_results["brdf"] = renderer.render(**common_params, sampling_strategy=SAMPLE_BRDF)
     n_cubes = [16, 14, 12, 10, 8, 6, 4]
     n_uvs = [16, 14, 12, 10, 8, 6, 4]
     print(kwargs)

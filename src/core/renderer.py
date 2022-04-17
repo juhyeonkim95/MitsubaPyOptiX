@@ -9,7 +9,7 @@ from path_guiding.radiance_record import QTable
 from utils.logging_utils import *
 from utils.timing_utils import *
 import gc
-from core.optix_scene import OptiXSceneContext
+from core.optix_scene import OptiXSceneContext, update_optix_configs
 
 
 class Renderer:
@@ -51,8 +51,8 @@ class Renderer:
         self.context['output_buffer'] = Buffer.empty((height, width, 4), dtype=np.float32, buffer_type='o', drop_last_dim=True)
         self.context['output_buffer2'] = Buffer.empty((height, width, 4), dtype=np.float32, buffer_type='o',  drop_last_dim=True)
 
-    def load_scene(self, scene_name):
-        if self.scene_name != scene_name:
+    def load_scene(self, scene_name, forced=False):
+        if self.scene_name != scene_name or forced:
             del self.optix_context
             del self.scene
             gc.collect()
@@ -66,9 +66,10 @@ class Renderer:
 
             with time_measure("[3] OptiX Load", self.render_load_logger):
                 self.optix_context.load_scene(self.scene)
-
+            return True
         else:
             self.render_load_logger.info("Skipped loading scene because it has been already loaded")
+            return False
 
     def render(
             self,
@@ -77,7 +78,7 @@ class Renderer:
             time_limit_in_sec=-1,
             time_limit_init_ignore_step=0,
             time_consider_only_optix=False,
-            sampling_strategy=SAMPLE_COSINE,
+            sampling_strategy=SAMPLE_BRDF,
             q_table_update_method=Q_UPDATE_MONTE_CARLO,
             show_picture=False,
             samples_per_pass=16,
@@ -85,9 +86,7 @@ class Renderer:
             accumulative_q_table_update=True,
             max_depth=8,
             rr_begin_depth=4,
-            uv_n=8,
-            n_cube=16,
-            directional_mapping_method="equal_area",
+            directional_mapping_method="shirley",
             use_bsdf_first_force=True,
             force_update_q_table=False,
             bsdf_sampling_fraction=0.0,
@@ -97,7 +96,17 @@ class Renderer:
             **kwargs
     ):
         # load scene info & init optix
-        self.load_scene(scene_name)
+        update_optix_configs(
+            sampling_strategy=sampling_strategy,
+            q_table_update_method=q_table_update_method,
+            spatial_data_structure_type=kwargs.get("spatial_data_structure_type", "grid"),
+            directional_data_structure_type=kwargs.get("directional_data_structure_type", "grid"),
+            directional_mapping_method=directional_mapping_method
+        )
+
+        optix_created = self.load_scene(scene_name)
+        if not optix_created:
+            self.optix_context.update_program()
 
         # just for shorter name
         context = self.context
@@ -113,7 +122,7 @@ class Renderer:
         context["q_table_update_method"] = np.array(q_table_update_method, dtype=np.uint32)
         context["accumulative_q_table_update"] = np.array(1 if accumulative_q_table_update else 0, dtype=np.uint32)
 
-        need_q_table_update = force_update_q_table or not ((sampling_strategy == SAMPLE_UNIFORM) or (sampling_strategy == SAMPLE_COSINE))
+        need_q_table_update = force_update_q_table or not ((sampling_strategy == SAMPLE_UNIFORM) or (sampling_strategy == SAMPLE_BRDF))
 
         context["need_q_table_update"] = np.array(1 if need_q_table_update else 0, dtype=np.uint32)
 
@@ -159,6 +168,12 @@ class Renderer:
         counter_sample_exponential_update_size = 4
         counter_q_table_update = 0
 
+        spatial_tree_size = []
+        directional_tree_sizes = []
+        if q_table is not None:
+            spatial_tree_size.append(q_table.spatial_data_structure.get_size())
+            directional_tree_sizes.append(q_table.directional_data_structure.get_avg_size())
+
         main_render_loop_start_time = time.time()
         '''
         Main Render Loop
@@ -171,17 +186,17 @@ class Renderer:
                     self.render_logger.debug(
                         "Current Pass: %d, Current Samples: %d" % (n_pass, current_samples_per_pass))
 
-                    if (not no_exploration) and sampling_strategy != SAMPLE_Q_SPHERE:
+                    if (not no_exploration) and sampling_strategy != SAMPLE_MIS:
                         epsilon = getEpsilon(completed_samples, 100000, t=1, k=100)
                         epsilon = max(epsilon, min_epsilon)
                     else:
                         epsilon = 0.0
 
                     context["completed_sample_number"] = np.array(completed_samples, dtype=np.uint32)
-                    if n_pass == 0 and use_bsdf_first_force:
-                        context['sampling_strategy'] = np.array(SAMPLE_COSINE, dtype=np.uint32)
+                    if n_pass == 0 and need_q_table_update:
+                        context['bsdf_sampling_fraction'] = np.array(1, dtype=np.float32)
+                        print("Force First BSDF sampling!!")
                     else:
-                        context['sampling_strategy'] = np.array(sampling_strategy, dtype=np.uint32)
                         context['bsdf_sampling_fraction'] = np.array(bsdf_sampling_fraction, dtype=np.float32)
 
                     # Run OptiX program
@@ -190,8 +205,11 @@ class Renderer:
 
                     # Update/refine radiance record if needed
                     if need_q_table_update and completed_samples >= counter_sample_next_q_table_update:
-                        with record_elapsed_time("Q table update time", list_time_q_table_update, self.render_logger):
-                            q_table.update_pdf(context, k=counter_q_table_update, **kwargs)
+                        with record_elapsed_time("Q table update time", list_time_q_table_update, self.render_logger, debug=False):
+                            q_table.update_pdf(context, k=counter_q_table_update, epsilon=epsilon, **kwargs)
+                        spatial_tree_size.append(q_table.spatial_data_structure.get_size())
+                        directional_tree_sizes.append(q_table.directional_data_structure.get_avg_size())
+
                         if learning_method == "exponential":
                             counter_sample_exponential_update_size *= 2
                             counter_sample_next_q_table_update += counter_sample_exponential_update_size
@@ -204,7 +222,9 @@ class Renderer:
 
                     if n_pass > 0:
                         hit = hit_new_sum - hit_sum
-                        list_hit_counts.append(hit)
+                    else:
+                        hit = hit_new_sum
+                    list_hit_counts.append(hit)
 
                     hit_sum = hit_new_sum
 
@@ -272,6 +292,9 @@ class Renderer:
         results["hit_rate_per_pass"] = list_hit_rates
         results["elapsed_time_per_sample_per_pass"] = list_time_optix_launch_per_sample[1:-1]
         results["q_table_update_times"] = list_time_q_table_update
+        results["spatial_tree_size"] = spatial_tree_size
+        results["directional_tree_sizes"] = directional_tree_sizes
+        results["total_node_counts"] = [t * n for t, n in zip(spatial_tree_size, directional_tree_sizes)]
 
         # scalar
         # (1) Time
@@ -290,7 +313,6 @@ class Renderer:
 
         if need_q_table_update:
             results["q_table_info"] = q_table
-
 
         self.render_logger.info("[Rendering complete]")
         for key, v in results.items():

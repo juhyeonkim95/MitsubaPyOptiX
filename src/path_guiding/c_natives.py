@@ -71,6 +71,22 @@ update_binary_tree_native.argtypes = [
 	ctypes.c_uint32
 ]
 
+update_binary_tree_native_grid = c_lib.update_binary_tree_native_grid
+update_binary_tree_native_grid.restype = ctypes.c_uint32
+update_binary_tree_native_grid.argtypes = [
+	_doublepp,
+	ctypes.c_uint32,
+
+	ndpointer(dtype=ctypes.c_uint32, flags='C_CONTIGUOUS'),
+	ndpointer(dtype=ctypes.c_uint32, flags='C_CONTIGUOUS'),
+	ndpointer(dtype=ctypes.c_uint32, flags='C_CONTIGUOUS'),
+	ndpointer(dtype=ctypes.c_uint32, flags='C_CONTIGUOUS'),
+	ndpointer(dtype=ctypes.c_uint32, flags='C_CONTIGUOUS'),
+
+	ctypes.c_uint32,
+	ctypes.c_uint32,
+	ctypes.c_uint32
+]
 
 def pp(x):
 	xpp = (x.__array_interface__['data'][0] + np.arange(x.shape[0]) * x.strides[0]).astype(np.uintp)

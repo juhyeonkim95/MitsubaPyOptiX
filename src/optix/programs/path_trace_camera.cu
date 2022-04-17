@@ -37,6 +37,7 @@
 //#if SAMPLING_STRATEGY == SAMPLING_STRATEGY_BSDF
 //#include "optix/integrators/path.h"
 //#elif SAMPLING_STRATEGY == SAMPLING_STRATEGY_SD_TREE
+//#include "optix/integrators/guided_path_sarsa.h"
 #include "optix/integrators/guided_path.h"
 #include "optix/integrators/path.h"
 //#endif
@@ -69,16 +70,13 @@ rtBuffer<float2, 2>               scatter_type_buffer;
 
 //rtDeclareVariable(unsigned int,  scatter_sample_type, , );
 rtDeclareVariable(unsigned int,  need_q_table_update, , );
+rtDeclareVariable(unsigned int,  q_table_update_method, , );
+
 //rtDeclareVariable(unsigned int,     use_mis, , );
 //rtDeclareVariable(unsigned int,     use_soft_q_update, , );
 //rtDeclareVariable(unsigned int,     construct_stree, , );
 //rtBuffer<float3, 3>              point_buffer;
-
-
-#define SAMPLE_BSDF 1
-#define SAMPLE_Q_QUADTREE 7
-
-rtDeclareVariable(unsigned int,     sampling_strategy, , );
+//rtDeclareVariable(unsigned int,     sampling_strategy, , );
 
 
 RT_PROGRAM void pathtrace_camera()
@@ -113,11 +111,17 @@ RT_PROGRAM void pathtrace_camera()
         // Each iteration is a segment of the ray path.  The closest hit will
         // return new segments to be traced here.
         PerPathData ppd;
-        switch(sampling_strategy){
-        case(SAMPLE_Q_QUADTREE): guided_path::path_trace(ray, seed, ppd);break;
-        case(SAMPLE_BSDF): path::path_trace(ray, seed, ppd); break;
-        }
-
+    #if SAMPLING_STRATEGY == SAMPLE_BRDF
+        path::path_trace(ray, seed, ppd);
+    #else
+        guided_path::path_trace(ray, seed, ppd);
+    #endif
+//    #if Q_UPDATE_METHOD == Q_UPDATE_SARSA
+//        guided_path_sarsa::path_trace(ray, seed, ppd);
+//    #elif Q_UPDATE_METHOD == Q_UPDATE_MONTE_CARLO
+//        guided_path_mc::path_trace(ray, seed, ppd);
+//    #endif
+//    #endif
         result += ppd.result;
         hit_count += dot(ppd.result, ppd.result) > 0 ? 1 : 0;
         // seed = prd.seed;

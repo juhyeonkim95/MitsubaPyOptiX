@@ -9,6 +9,7 @@ from path_guiding.directional_data_structure.directional_quad_tree import Direct
 from path_guiding.spatial_data_structure.spatial_data_structure import SpatialDataStructure
 from path_guiding.spatial_data_structure.spatial_voxel import SpatialVoxel
 from path_guiding.spatial_data_structure.spatial_binary_tree import SpatialAdaptiveBinaryTree
+from core.renderer_constants import *
 
 
 def get_directional_data_structure(q_table, **kwargs) -> DirectionalDataStructure:
@@ -32,7 +33,7 @@ class QTable:
         self.radiance_record_logger = load_logger("Radiance Record")
         from utils.timing_utils import time_measure
 
-        self.directional_mapping_method = kwargs.get("directional_mapping_method", "equal_area")
+        self.directional_mapping_method = kwargs.get("directional_mapping_method", "cylindrical")
         self.accumulative_q_table_update = kwargs.get("accumulative_q_table_update", True)
 
         self.spatial_data_structure = get_spatial_data_structure(self, **kwargs)
@@ -52,15 +53,22 @@ class QTable:
         self.q_table_accumulated = np.zeros((self.n_s, self.n_a), dtype=np.float32)
         self.q_table_pdf = np.zeros((self.n_s, self.n_a), dtype=np.float32)
         self.q_table_pdf.fill(1 / self.n_a)
+        self.q_table_cdf = np.cumsum(self.q_table_pdf, axis=1)
         self.q_table_visit_counts = np.zeros((self.n_s, self.n_a), dtype=np.uint32)
         self.q_table_normal_counts = np.zeros((self.n_s, self.n_a), dtype=np.uint32)
+        self.irradiance_table = np.zeros((self.n_s, self.n_a), dtype=np.float32)
+        self.max_radiance_table = np.zeros((self.n_s, self.n_a), dtype=np.float32)
 
+        # initial refine
+        self.q_table.fill(1)
+        self.directional_data_structure.refine(None, self.spatial_data_structure.get_size(), threshold=0.01, force_cpu=True)
+        self.q_table.fill(0)
 
     @staticmethod
     def register_empty_context(context):
         print("Register default value")
         # spatial, grid
-        context['unitCubeNumber'] = np.array([0, 0, 0], dtype=np.uint32)
+        # context['unitCubeNumber'] = np.array([0, 0, 0, 0], dtype=np.uint32)
 
         # spatial,  octree
         context['stree_index_array'] = Buffer.empty((0,), dtype=np.uint32, buffer_type='i', drop_last_dim=False)
@@ -90,6 +98,7 @@ class QTable:
         context['q_table'] = Buffer.empty((0, 0), dtype=np.float32, buffer_type='io', drop_last_dim=False)
         context['q_table_accumulated'] = Buffer.empty((0, 0), dtype=np.float32, buffer_type='io', drop_last_dim=False)
         context['q_table_pdf'] = Buffer.empty((0, 0), dtype=np.float32, buffer_type='io', drop_last_dim=False)
+        context['q_table_cdf'] = Buffer.empty((0, 0), dtype=np.float32, buffer_type='io', drop_last_dim=False)
         context['q_table_visit_counts'] = Buffer.empty((0, 0), dtype=np.uint32, buffer_type='i', drop_last_dim=False)
         context['q_table_normal_counts'] = Buffer.empty((0, 0), dtype=np.uint32, buffer_type='i', drop_last_dim=False)
         context['invalid_sample_counts'] = Buffer.empty((0, ), dtype=np.uint32, buffer_type='i', drop_last_dim=False)
@@ -98,8 +107,6 @@ class QTable:
         # etc
         context['irradiance_table'] = Buffer.empty((0, 0), dtype=np.float32, buffer_type='io', drop_last_dim=False)
         context['max_radiance_table'] = Buffer.empty((0, 0), dtype=np.float32, buffer_type='io', drop_last_dim=False)
-        mcmc_init = np.random.random((0, 0, 2)).astype(np.float32)
-        context['mcmc_table'] = Buffer.from_array(mcmc_init, dtype=np.float32, buffer_type='io', drop_last_dim=True)
 
     def register_to_context(self, context):
         # (1) Spatial
@@ -114,7 +121,7 @@ class QTable:
         elif isinstance(self.directional_data_structure, DirectionalQuadTree):
             context['directional_data_structure_type'] = np.array(1, dtype=np.uint32)
 
-        if self.directional_mapping_method == 'equal_area':
+        if self.directional_mapping_method == 'shirley':
             context['directional_mapping_method'] = np.array(0, dtype=np.uint32)
         elif self.directional_mapping_method == 'cylindrical':
             context['directional_mapping_method'] = np.array(1, dtype=np.uint32)
@@ -127,8 +134,12 @@ class QTable:
         context['q_table'] = Buffer.from_array(self.q_table, buffer_type='io', drop_last_dim=False)
         context['q_table_accumulated'] = Buffer.from_array(self.q_table_accumulated, buffer_type='io', drop_last_dim=False)
         context['q_table_pdf'] = Buffer.from_array(self.q_table_pdf, buffer_type='io', drop_last_dim=False)
+        context['q_table_cdf'] = Buffer.from_array(self.q_table_cdf, buffer_type='io', drop_last_dim=False)
         context['q_table_visit_counts'] = Buffer.from_array(self.q_table_visit_counts, buffer_type='io', drop_last_dim=False)
         context['q_table_normal_counts'] = Buffer.from_array(self.q_table_normal_counts, buffer_type='io', drop_last_dim=False)
+
+        context['irradiance_table'] = Buffer.from_array(self.irradiance_table, buffer_type='io', drop_last_dim=False)
+        context['max_radiance_table'] = Buffer.from_array(self.max_radiance_table, buffer_type='io', drop_last_dim=False)
 
     def copy_to_child(self, copy_list):
         for p in copy_list:
@@ -139,6 +150,7 @@ class QTable:
         context['q_table'].copy_from_array(self.q_table)
         context['q_table_accumulated'].copy_from_array(self.q_table_accumulated)
         context['q_table_pdf'].copy_from_array(self.q_table_pdf)
+        context['q_table_cdf'].copy_from_array(self.q_table_cdf)
         context['q_table_visit_counts'].copy_from_array(self.q_table_visit_counts)
         context['q_table_normal_counts'].copy_from_array(self.q_table_normal_counts)
 
@@ -146,24 +158,27 @@ class QTable:
         context['q_table'].copy_to_array(self.q_table)
         context['q_table_accumulated'].copy_to_array(self.q_table_accumulated)
         context['q_table_pdf'].copy_to_array(self.q_table_pdf)
+        context['q_table_pdf'].copy_to_array(self.q_table_cdf)
         context['q_table_visit_counts'].copy_to_array(self.q_table_visit_counts)
         context['q_table_normal_counts'].copy_to_array(self.q_table_normal_counts)
 
     def update_pdf(self, context, k=2, **kwargs):
+        global updated
+
         # (0) calculate q table
         if self.accumulative_q_table_update:
             context['q_table_visit_counts'].copy_to_array(self.q_table_visit_counts)
             context['q_table_accumulated'].copy_to_array(self.q_table_accumulated)
 
-            print("Total visit count", np.sum(self.q_table_visit_counts))
-            print("Total q_table_accumulated count", np.sum(self.q_table_accumulated))
-
             # this fills q_table with right hand value
             self.q_table[:] = np.divide(self.q_table_accumulated, self.q_table_visit_counts,
                                      out=np.zeros_like(self.q_table),
                                      where=self.q_table_visit_counts != 0.0)
+            context['q_table'].copy_from_array(self.q_table)
         else:
             context['q_table'].copy_to_array(self.q_table)
+
+        # self.directional_data_structure.visualize(187)
 
         # (1) Directional Data Structure Refinement
         if isinstance(self.directional_data_structure, DirectionalQuadTree):
@@ -202,21 +217,27 @@ class QTable:
             self.directional_data_structure.copy_to_context(context)
 
         # (5) finally clear q_table accumulated info
-        zeros = np.zeros((self.n_s, self.n_a), dtype=np.float32)
-        zeros2 = np.zeros((self.n_s, self.n_a), dtype=np.uint32)
-        context['q_table_accumulated'].copy_from_array(zeros)
-        context['q_table_visit_counts'].copy_from_array(zeros2)
+        # This is only valid is no data structure update occurs !!!
+        if kwargs.get('clear_accumulated_info_per_update', True):
+            zeros = np.zeros((self.n_s, self.n_a), dtype=np.float32)
+            zeros2 = np.zeros((self.n_s, self.n_a), dtype=np.uint32)
+            context['q_table_accumulated'].copy_from_array(zeros)
+            context['q_table_visit_counts'].copy_from_array(zeros2)
 
-        # return
-        #
-        # # 2. calculate sampling pdf
-        # self.q_table += 1e-6
-        # q_table_sum = np.sum(self.q_table, axis=1, keepdims=True)
-        # self.q_table_pdf = np.divide(self.q_table, q_table_sum)
-        #
-        # # mix with epsilon
-        # self.q_table_pdf = self.q_table_pdf * (1 - epsilon) + 1 / self.n_a * epsilon
-        # if cdf:
-        #     self.q_table_pdf = np.cumsum(self.q_table_pdf, axis=1)
-        # context["q_table_pdf"].copy_from_array(self.q_table_pdf)
+        epsilon = kwargs.get("epsilon", 0)
+        print("EPSILON", epsilon)
+        self.q_table += 1e-10
+        q_table_sum = np.sum(self.q_table, axis=1, keepdims=True)
+        self.q_table_pdf = np.divide(self.q_table, q_table_sum)
 
+        if epsilon > 0:
+            # 2. calculate sampling pdf
+            # mix with epsilon
+            self.q_table_pdf = self.q_table_pdf * (1 - epsilon) + 1 / self.n_a * epsilon
+
+        if isinstance(self.directional_data_structure, DirectionalGrid):
+            self.q_table_cdf = np.cumsum(self.q_table_pdf, axis=1)
+            context["q_table_cdf"].copy_from_array(self.q_table_cdf)
+            context["q_table_pdf"].copy_from_array(self.q_table_pdf)
+            context["irradiance_table"].copy_from_array(self.irradiance_table)
+            context["max_radiance_table"].copy_from_array(self.max_radiance_table)

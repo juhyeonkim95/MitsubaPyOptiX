@@ -58,14 +58,15 @@ def render_single_using_multiprocessing(x):
 
 def process_configs(config):
     sample_type_dict = {
-        "brdf": SAMPLE_COSINE,
-        "q_brdf_inv": SAMPLE_Q_COS_PROPORTION,
+        "brdf": SAMPLE_BRDF,
+        "q_brdf_inv": SAMPLE_Q_COS_INVERSION,
         "q_brdf_rej": SAMPLE_Q_COS_REJECT,
         "q_brdf_rej_mix": SAMPLE_Q_COS_REJECT_MIX,
-        "q_brdf_mcmc": SAMPLE_Q_COS_MCMC,
-        "q_mis_sphere": SAMPLE_Q_SPHERE,
-        "q_mis_quadtree": SAMPLE_Q_QUADTREE
+        #"q_brdf_mcmc": SAMPLE_Q_COS_MCMC,
+        #"q_mis_sphere": SAMPLE_Q_SPHERE,
+        #"q_mis_quadtree": SAMPLE_Q_QUADTREE
     }
+
     q_table_update_method_dict = {
         "sarsa": Q_UPDATE_SARSA,
         "expected_sarsa": Q_UPDATE_EXPECTED_SARSA,

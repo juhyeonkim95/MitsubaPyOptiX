@@ -21,4 +21,4 @@ class SpatialVoxel(SpatialDataStructure):
         return self.n_cube * self.n_cube * self.n_cube
 
     def create_optix_buffer(self, context):
-        context['unitCubeNumber'] = np.array([self.n_cube] * 3, dtype=np.uint32)
+        context['unitCubeNumber'] = np.array([self.n_cube, self.n_cube, self.n_cube, self.n_cube * self.n_cube], dtype=np.uint32)

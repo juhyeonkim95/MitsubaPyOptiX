@@ -39,7 +39,7 @@ def show_result_stacked_bar(dictionaries, target_key1, target_key2):
 	fig, ax = plt.subplots()
 
 	ax.bar(names, values1, label=target_key1)
-	ax.bar(names, values2, label=target_key2)
+	ax.bar(names, values2, label=target_key2, bottom=values1)
 
 	ax.tick_params(labelrotation=90)
 	ax.set_ylabel("sec")
@@ -63,7 +63,6 @@ def show_result_sequence(dictionaries, key):
 def show_result_func(total_results):
 	show_result_bar(total_results, "error_mean")
 	show_result_bar(total_results, "elapsed_time_per_sample")
-	show_result_bar(total_results, "elapsed_time_per_sample_except_init")
 	show_result_stacked_bar(total_results, "total_optix_launch_time", "total_q_table_update_time")
 
 	show_result_bar(total_results, "total_hit_percentage")
@@ -73,3 +72,6 @@ def show_result_func(total_results):
 	show_result_sequence(total_results, "hit_rate_per_pass")
 	show_result_sequence(total_results, "elapsed_time_per_sample_per_pass")
 	show_result_sequence(total_results, "q_table_update_times")
+	show_result_sequence(total_results, "spatial_tree_size")
+	show_result_sequence(total_results, "directional_tree_sizes")
+	show_result_sequence(total_results, "total_node_counts")

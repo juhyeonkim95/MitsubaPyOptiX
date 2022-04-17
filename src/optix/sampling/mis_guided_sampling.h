@@ -20,20 +20,13 @@ RT_FUNCTION void Sample(
     const MaterialParameter& mat, const SurfaceInteraction &si,
     const optix::Onb &onb, unsigned int &seed, BSDFSample3f &bs)
 {
-
-    if(!(mat.bsdf_type & BSDFTypes::GuideTargets)){
-        bsdf::Sample(mat, si, seed, bs);
-        onb.inverse_transform(bs.wo);
-        return;
-    }
-
     // ----------------------- Guided sampling ----------------------
     // Use Multiple Importance Sampling
-    float bsdf_pdf;
-    float radiance_pdf;
+    float bsdf_pdf = 0;
+    float radiance_pdf = 0;
 
     // (1) BSDF Sampling (prop to f * cos)
-    if (rnd(seed) < bsdf_sampling_fraction){
+    if (rnd(seed) <= bsdf_sampling_fraction){
         bsdf::Sample(mat, si, seed, bs);
         onb.inverse_transform(bs.wo);
 

@@ -67,7 +67,7 @@ def get_bbox_transformed(bbox: BoundingBox, transformation):
     return BoundingBox(bbox_max_new, bbox_min_new)
 
 
-def mapUVToDirection(uv, flipy=False):
+def mapUVToDirection(uv):
     x = 2 * uv[0] - 1
     y = 2 * uv[1] - 1
     if (y > -x):
@@ -110,11 +110,7 @@ def mapUVToDirection(uv, flipy=False):
     assert xx >= 0
     theta = math.acos(max(min(1 - xx * xx, 1), -1))
     phi = (math.pi / 4) * (offset + (yy / xx))
-    if flipy:
-        ay = - math.cos(theta)
-    else:
-        ay = math.cos(theta)
-    return (math.sin(theta) * math.cos(phi), ay, - math.sin(theta) * math.sin(phi))
+    return (math.sin(theta) * math.cos(phi), math.cos(theta), - math.sin(theta) * math.sin(phi))
 
 
 def mapDirectionToUV(direction):
@@ -166,28 +162,43 @@ def mapDirectionToUV(direction):
     return (u, v)
 
 
-def getDirectionFrom(index, offset, size):
+def getDirectionFrom(index, offset, size, method="shirley"):
     sx, sy = size
     u_index = (index // sy)
     v_index = (index % sy)
-    inverted = False
-    if u_index > sx:
-        u_index -= sx
-        inverted = True
+    if method == "shirley":
+        inverted = False
+        if u_index >= sx:
+            u_index -= sx
+            inverted = True
 
-    u_index_r = (float(u_index) + offset[0]) / (float(sx))
-    v_index_r = (float(v_index) + offset[1]) / (float(sy))
-    rx, ry, rz = mapUVToDirection((u_index_r, v_index_r))
-    if inverted:
-        return rx, -ry, rz
+        u_index_r = (float(u_index) + offset[0]) / (float(sx))
+        v_index_r = (float(v_index) + offset[1]) / (float(sy))
+
+        rx, ry, rz = mapUVToDirection((u_index_r, v_index_r))
+        if inverted:
+            return rx, -ry, rz
+        else:
+            return rx, ry, rz
     else:
-        return rx, ry, rz
+        u_index_r = (float(u_index) + offset[0]) / (float(sx))
+        v_index_r = (float(v_index) + offset[1]) / (float(sy))
 
+        return cylindrical_uv_to_direction((u_index_r, v_index_r))
+
+
+def cylindrical_uv_to_direction(uv):
+    cos_theta = 2 * uv[0] - 1
+    phi = 2 * math.pi * uv[1]
+    sin_theta = math.sqrt(1 - cos_theta * cos_theta)
+    sin_phi = math.sin(phi)
+    cos_phi = math.cos(phi)
+    return sin_theta * cos_phi, sin_theta * sin_phi, cos_theta
 
 def getEpsilon(index, max_index, t=0, a=0.1, k=100):
-    if t is 0:
+    if t == 0:
         return max(1 - index / max_index, 0)
-    elif t is 1:
+    elif t == 1:
         x = math.pow(a, 1 / k)
         #x = max(x, 0.05)
         return math.pow(x, index)

@@ -40,15 +40,15 @@ if __name__ == '__main__':
     Compiler.add_program_directory(file_dir)
 
     from path_guiding.c_natives import update_binary_tree_native
-    print(update_binary_tree_native)
+    # print(update_binary_tree_native)
 
-    all_scenes1 = ['cornell-box', 'cornell-box-hard', "veach_door_simple"]
-    all_scenes = all_scenes1 + ['bathroom', 'bathroom2', 'bedroom', 'kitchen',
-                                'living-room'
-                                'living-room-2', 'living-room-3', 'staircase', 'staircase2',
-                                'veach-ajar']
-
-    all_scenes = ['cornell-box']
+    # all_scenes1 = ['cornell-box', 'cornell-box-hard', "veach_door_simple"]
+    # all_scenes = all_scenes1 + ['bathroom', 'bathroom2', 'bedroom', 'kitchen',
+    #                             'living-room',
+    #                             'living-room-2', 'living-room-3', 'staircase', 'staircase2',
+    #                             'veach-ajar']
+    # all_scenes = [ 'living-room', 'living-room-2', 'living-room-3', 'staircase', 'staircase2', 'veach-ajar']
+    all_scenes = ['cornell-box-hard']
     # all_scenes = ["material-testball"]
 
     # show_radiance_map("kitchen", 4)
@@ -71,9 +71,9 @@ if __name__ == '__main__':
 
     for scene in all_scenes:
         test_single_scene(scene, scale=4, test_target=2, show_picture=True, show_result=True,
-                          do_bsdf=False, _spp=1024, _time=10, test_time=True)
+                          do_bsdf=True, _spp=1024, _time=10, test_time=False)
 
-    #test_multiple_and_export_result(all_scenes, 4, output_folder="../result/sdtree_scale_4_time_10", _time=10, test_time=True, test_target=2)
+    #test_multiple_and_export_result(all_scenes, 4, output_folder="../result/2021_0803_sdtree_scale_4_time_10", _time=10, test_time=True, test_target=2)
     #test_multiple_and_export_result(all_scenes, 2, output_folder="../result_20210519_scale_2_time_40", _time=40, test_time=True)
     #test_multiple_and_export_result(all_scenes, 2, output_folder="../result_20210519_scale_2_time_20", _time=20, test_time=True)
     #test_multiple_and_export_result(all_scenes, 2, output_folder="../result_20210519_scale_2_time_10", _time=10, test_time=True)

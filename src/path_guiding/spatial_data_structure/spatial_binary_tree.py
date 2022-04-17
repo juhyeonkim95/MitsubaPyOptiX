@@ -152,25 +152,44 @@ class SpatialAdaptiveBinaryTree(SpatialDataStructure):
                 self.subdivide(node)
 
     def refine_native(self, dq, value_array, threshold):
+        from path_guiding.directional_data_structure.directional_grid import DirectionalGrid
+        from path_guiding.directional_data_structure.directional_quad_tree import DirectionalQuadTree
+
         print("Before leaf node", self.leaf_node_number)
-        self.leaf_node_number = update_binary_tree_native(
-            pp(dq.dtree_index_array),
-            pp(dq.dtree_rank_array),
-            pp(dq.dtree_depth_array),
-            pp(dq.dtree_select_array),
-            pp(value_array),
-            dq.current_sizes,
+        if isinstance(dq, DirectionalQuadTree):
+            self.leaf_node_number = update_binary_tree_native(
+                pp(dq.dtree_index_array),
+                pp(dq.dtree_rank_array),
+                pp(dq.dtree_depth_array),
+                pp(dq.dtree_select_array),
+                pp(value_array),
+                dq.current_sizes,
 
-            self.visit_count_array,
-            self.child_array,
-            self.parent_array,
-            self.axis_array,
-            self.leaf_node_index_array,
+                self.visit_count_array,
+                self.child_array,
+                self.parent_array,
+                self.axis_array,
+                self.leaf_node_index_array,
 
-            threshold,
-            self.leaf_node_number,
-            self.max_leaf_node_number
-        )
+                threshold,
+                self.leaf_node_number,
+                self.max_leaf_node_number
+            )
+        elif isinstance(dq, DirectionalGrid):
+            self.leaf_node_number = update_binary_tree_native_grid(
+                pp(value_array),
+                dq.get_size(),
+
+                self.visit_count_array,
+                self.child_array,
+                self.parent_array,
+                self.axis_array,
+                self.leaf_node_index_array,
+
+                threshold,
+                self.leaf_node_number,
+                self.max_leaf_node_number
+            )
         print("After leaf node", self.leaf_node_number)
 
     @timed
@@ -306,6 +325,8 @@ class SpatialAdaptiveBinaryTree(SpatialDataStructure):
         red = np.array([1, 0, 0], dtype=np.float32)
         green = np.array([0, 1, 0], dtype=np.float32)
 
+        max_count = np.max(self.visit_count_array)
+
         for i in range(total_node_number):
             if self.is_leaf(i):
                 center = (boxes[i].s + boxes[i].e) * 0.5
@@ -321,7 +342,8 @@ class SpatialAdaptiveBinaryTree(SpatialDataStructure):
                 else:
                     color = red
                 colors.append(color)
-                scale = self.visit_count_array[self.leaf_node_index_array[i]] / (np.max(self.visit_count_array) + 1) * 30
+                scale = 1 if max_count == 0 else self.visit_count_array[self.leaf_node_index_array[i]] / max_count
+                scale *= 30
                 scales.append(scale)
 
                 #scatter_cube(ax, boxes[i].s, boxes[i].e)

@@ -1,5 +1,5 @@
 #include "optix/integrators/common.h"
-#include "optix/sampling/mis_guided_sampling.h"
+#include "optix/sampling/guided_sampling.h"
 
 #define MAX_NUM_VERTICES 32
 
@@ -9,11 +9,13 @@ namespace guided_path{
 RT_FUNCTION void path_trace(Ray& ray, unsigned int& seed, PerPathData &ppd)
 {
 
-    float3 ray_origins[MAX_NUM_VERTICES];
-    float3 ray_directions[MAX_NUM_VERTICES];
+#if Q_UPDATE_METHOD == Q_UPDATE_MONTE_CARLO
+    uint ray_origins[MAX_NUM_VERTICES];
+    uint ray_directions[MAX_NUM_VERTICES];
     float3 radiances[MAX_NUM_VERTICES];
     float3 current_attenuations[MAX_NUM_VERTICES];
     float3 direct_radiances[MAX_NUM_VERTICES];
+#endif
 
     float emission_weight = 1.0;
     float3 throughput = make_float3(1.0);
@@ -35,12 +37,19 @@ RT_FUNCTION void path_trace(Ray& ray, unsigned int& seed, PerPathData &ppd)
 #endif
 
     for (depth = 1; ; depth++){
+#if Q_UPDATE_METHOD == Q_UPDATE_MONTE_CARLO
         radiances[depth] = si.emission;
-        ray_origins[depth] = si.p;
-
+        uint position_index = positionToIndex(si.p);
+        ray_origins[depth] = position_index;
+#endif
         // ---------------- Intersection with emitters ----------------
         result += emission_weight * throughput * si.emission;
-
+#if Q_UPDATE_METHOD == Q_UPDATE_SARSA
+        float e = (si.emission.x + si.emission.y + si.emission.z) / 3.0;
+        if(e > 0 && depth > 1){
+            accumulateQValue(ray.origin, ray.direction, e);
+        }
+#endif
         // ---------------- Terminate ray tracing ----------------
         // (1) over max depth
         // (2) ray missed
@@ -91,7 +100,7 @@ RT_FUNCTION void path_trace(Ray& ray, unsigned int& seed, PerPathData &ppd)
 
         if (!prd_shadow.inShadow)
         {
-            float scatterPdf = mis_guided_sampling::Pdf(mat, si, onb, wo);
+            float scatterPdf = guided_sampling::Pdf(mat, si, onb, wo);
             float3 f = bsdf::Eval(mat, si, wo_local);
 
             // Delta light
@@ -103,12 +112,16 @@ RT_FUNCTION void path_trace(Ray& ray, unsigned int& seed, PerPathData &ppd)
             }
             // L *= float(num_lights);
         }
-        direct_radiances[depth] = L;
+        //direct_radiances[depth] = L;
         result += throughput * L;
 #endif
         // --------------------- Surface scatter sampling ---------------------
-        mis_guided_sampling::Sample(mat, si, onb, seed, bs);
-
+        guided_sampling::Sample(mat, si, onb, seed, bs);
+#if Q_UPDATE_METHOD == Q_UPDATE_SARSA
+        float next_q_value = getQValueFromPosDir(si.p, bs.wo);
+        float m = (bs.weight.x + bs.weight.y + bs.weight.z) / 3.0;
+        accumulateQValue(ray.origin, ray.direction, next_q_value * m);
+#endif
         ray.origin = si.p;
         ray.direction = bs.wo;
         throughput *= bs.weight;
@@ -123,9 +136,10 @@ RT_FUNCTION void path_trace(Ray& ray, unsigned int& seed, PerPathData &ppd)
         si.seed = seed;
         rtTrace(top_object, ray, si);
         seed = si.seed;
-
-        ray_directions[depth] = ray.direction;
+#if Q_UPDATE_METHOD == Q_UPDATE_MONTE_CARLO
+        ray_directions[depth] = DirectionToIndex(position_index, ray.direction);
         current_attenuations[depth] = bs.weight;
+#endif
 
 #if USE_NEXT_EVENT_ESTIMATION
         /* Determine probability of having sampled that same
@@ -139,20 +153,17 @@ RT_FUNCTION void path_trace(Ray& ray, unsigned int& seed, PerPathData &ppd)
         }
 #endif
     }
-
+#if Q_UPDATE_METHOD == Q_UPDATE_MONTE_CARLO
     float3 accumulated_radiance = radiances[depth];
+    float q;
     for(int i = depth-1; i>=1; i--){
-        float q = (accumulated_radiance.x + accumulated_radiance.y + accumulated_radiance.z) / 3.0;
-        accumulateQValue(ray_origins[i], ray_directions[i], q);
-        if(i == depth-1){
-            accumulated_radiance *= emission_weight;
-        }
-        accumulated_radiance = direct_radiances[i] + current_attenuations[i] * accumulated_radiance;
+        q = (accumulated_radiance.x + accumulated_radiance.y + accumulated_radiance.z) / 3.0;
+        accumulateQValueIndexed(ray_origins[i], ray_directions[i], q);
+        accumulated_radiance *= current_attenuations[i];
     }
-
+#endif
     ppd.result = result;
     ppd.depth = depth;
     ppd.is_valid = si.is_valid;
 }
 }
-

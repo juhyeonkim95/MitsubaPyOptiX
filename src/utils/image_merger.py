@@ -8,14 +8,14 @@ SIZE_CROP = 64
 
 _crop_data = {
     # Teaser
-    # "kitchen": ["297_194_361_258", "274_281_338_345", "545_284_609_348"],
+    "kitchen": ["297_194_361_258", "274_281_338_345", "545_284_609_348"],
 
     #"bathroom": ["59_353_123_417", "342_37_406_101"],
     #"bathroom2": ["385_245_449_309", "125_152_189_216"],
     #"bedroom": ["417_238_481_302", "357_276_421_340"],
     #"cornell-box": ["92_432_156_496", "268_320_332_384"],
     #"cornell-box-hard": ["95_193_159_257", "274_342_338_406"],
-    "kitchen": ["230_114_294_178", "469_271_533_335"],
+    # "kitchen": ["230_114_294_178", "469_271_533_335"],
     # "living-room": ["41_254_105_318", "462_206_526_270"],
     # "living-room-2": ["248_229_312_293", "524_168_588_232"],
     # "living-room-3": ["297_194_361_258", "274_281_338_345"],
@@ -32,10 +32,10 @@ _crop_data = {
 target_colors = ["#FF0000", "#FFFF00", "#FFA500", "#FFFF00"] * 10
 
 target_names = ["brdf",
-                "q_mis_quadtree_mc",
+                "q_mis_quadtree_mc_gpu",
                 "q_brdf_rej_sarsa",
-                "q_brdf_rej_expected_sarsa_mix",
-                "q_brdf_rej_sarsa_mix",
+                "q_brdf_rej_mix_expected_sarsa",
+                "q_brdf_rej_mix_sarsa",
                 "reference"
                 ]
 
@@ -116,6 +116,7 @@ def crop_image_in_folder_randomly(folder, crop_data_lists):
 
 if __name__ == "__main__":
     #crop_image_in_folder_randomly("../../result_0412_2/scale_2_time_40", 6)
-    crop_image_in_folder_randomly("../../result_0414_compare_epsilon_opt/scale_2_time_40", _crop_data)
+    # crop_image_in_folder_randomly("../../result_0414_compare_epsilon_opt/scale_2_time_40", _crop_data)
+    crop_image_in_folder_randomly("../../result_20210519_multi_test_scale_2_time_40", _crop_data)
 
     #crop_image_in_folder("../../result_0412_2/scale_2_time_40", crop_data)

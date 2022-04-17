@@ -6,17 +6,20 @@ import pybind11
 print(pybind11.__file__)
 print(pybind11.get_include())
 
+
 def run(cpp_name, extension_name):
     invoke.run(
         "g++ -O3 -Wall -Werror -shared -std=c++11 -fPIC "
         "`python3 -m pybind11 --includes` "
         "-I ~/anaconda3/envs/pathtracer3.8/include -I .  "
         "{0} "
-        "-o {1}`python3.8-config --extension-suffix` "
-        "-L. -lcppmult -Wl,-rpath,.".format(cpp_name, extension_name)
+        "-o {1}`python3.8-config --extension-suffix` ".format(cpp_name, extension_name)
+        # "-L. -lcppmult -Wl,-rpath,.".format(cpp_name, extension_name)
     )
 
+
 run("pybind11_wrapper.cpp", "libcppmult")
+
 
 #
 # if __name__ == "__main__":

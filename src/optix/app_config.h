@@ -2,7 +2,41 @@
 #define APP_CONFIG_H
 #define USE_NEXT_EVENT_ESTIMATION 0
 
-#define SAMPLING_STRATEGY_BSDF 1
-#define SAMPLING_STRATEGY_SD_TREE 7
-#define SAMPLING_STRATEGY 7
+// Sampling methods
+#define SAMPLE_BRDF             1
+#define SAMPLE_MIS              2
+#define SAMPLE_Q_COS_INVERSION  3
+#define SAMPLE_Q_COS_REJECT     4
+#define SAMPLE_Q_COS_REJECT_MIX 5
+
+#define SAMPLING_STRATEGY 1
+
+// Q table update methods
+#define Q_UPDATE_EXPECTED_SARSA 0
+#define Q_UPDATE_SARSA          1
+#define Q_UPDATE_MONTE_CARLO    2
+
+#define Q_UPDATE_METHOD 2
+
+// spatial data structure
+#define SPATIAL_DATA_STRUCTURE_VOXEL 0
+#define SPATIAL_DATA_STRUCTURE_OCTREE 1
+#define SPATIAL_DATA_STRUCTURE_BINARY_TREE 2
+
+#define SPATIAL_DATA_STRUCTURE_TYPE 4
+
+// directional data structure
+#define DIRECTIONAL_DATA_STRUCTURE_GRID 0
+#define DIRECTIONAL_DATA_STRUCTURE_QUADTREE 1
+
+#define DIRECTIONAL_DATA_STRUCTURE_TYPE 4
+
+// directional data mapping
+#define DIRECTION_UV_MAPPING_SHIRLEY 0
+#define DIRECTION_UV_MAPPING_CYLINDRICAL 1
+
+#define DIRECTION_UV_MAPPING_TYPE 4
+
+
+#define USE_MEMOIZATION 1
 #endif

@@ -5,6 +5,7 @@ import copy
 from queue import Queue
 from utils.timing_utils import *
 from path_guiding.c_natives import *
+import matplotlib.pyplot as plt
 
 
 class DirectionalQuadTree(DirectionalDataStructure):
@@ -25,6 +26,10 @@ class DirectionalQuadTree(DirectionalDataStructure):
 
     def get_size(self):
         return self.max_size
+
+    def get_avg_size(self):
+        avg_size = np.mean(self.current_sizes[0:self.q_table.spatial_data_structure.get_size()])
+        return avg_size
 
     def __str__(self):
         logs = ["[Directional Data Structure]"]
@@ -162,8 +167,8 @@ class DirectionalQuadTree(DirectionalDataStructure):
             self.q_table.q_table[d] = np.copy(self.q_table.q_table[s])
             self.current_sizes[d] = self.current_sizes[s]
 
-    def refine(self, context, n_s, threshold=0.01):
-        if 'cpu' in self.quadtree_update_type:
+    def refine(self, context, n_s, threshold=0.01, force_cpu=False):
+        if 'cpu' in self.quadtree_update_type or force_cpu:
             # (1) refine quadtree with single thread
             if n_s == 1 or self.quadtree_update_type == "cpu_single":
                 update_quadtree_native(pp(self.dtree_index_array), pp(self.dtree_rank_array), pp(self.dtree_depth_array),
@@ -203,3 +208,45 @@ class DirectionalQuadTree(DirectionalDataStructure):
         context['dtree_depth_array'] = Buffer.from_array(self.dtree_depth_array, buffer_type='io', drop_last_dim=False)
         context['dtree_select_array'] = Buffer.from_array(self.dtree_select_array, buffer_type='io', drop_last_dim=False)
         context['dtree_current_size_array'] = Buffer.from_array(self.current_sizes, buffer_type='io', drop_last_dim=False)
+
+    def visualize(self, index, image_size=512):
+        rank_array = self.dtree_rank_array[index]
+        index_array = self.dtree_index_array[index]
+        value_array = self.q_table.q_table[index]
+
+        q = Queue()
+        q.put(0)
+        pose_sizes = Queue()
+        pose_sizes.put(((0, 0), 1))
+        result_array = np.zeros((image_size, image_size))
+        result_array_boundary = np.zeros((image_size, image_size))
+
+        while not q.empty():
+            node = q.get()
+            origin, size = pose_sizes.get()
+
+            # inner node
+            if index_array[node] == 1:
+                for i in range(4):
+                    child_idx = 4 * rank_array[node] + i + 1
+                    q.put(child_idx)
+                    nx = origin[0] + 0.5 * (size if i >= 2 else 0)
+                    ny = origin[1] + 0.5 * (size if i % 2 == 1 else 0)
+                    pose_sizes.put(((nx, ny), size * 0.5))
+            # leaf node
+            else:
+                sx = int(image_size * origin[0])
+                sy = int(image_size * origin[1])
+                s = int(image_size * size)
+                a = value_array[node] / (np.max(value_array) + 1e-6)
+                result_array[sx:sx+s, sy:sy+s].fill(a)
+                result_array_boundary[sx:sx+s, sy:sy+s].fill(1)
+                w = 2
+                result_array_boundary[sx + w:sx + s - w, sy + w:sy + s - w].fill(0)
+
+        plt.figure()
+        plt.imshow(result_array)
+        plt.show()
+        plt.figure()
+        plt.imshow(result_array_boundary)
+        plt.show()
