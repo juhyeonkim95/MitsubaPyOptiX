@@ -1,5 +1,14 @@
 data/*
+!data/cornell_box/*
 /trash/
 .idea/*
 configs/*
-!data/cornell_box/*
+src/main.py
+src/main_test.py
+src/main_test_multiprocessing.py
+src/quadtree_updater.c
+src/test_utils.py
+src/test_utils_multiprocessing.py
+src/test_utils_multiprocessing_queued.py
+src/libquadtree_updater.so
+
