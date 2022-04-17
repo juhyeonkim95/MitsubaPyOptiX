@@ -1,4 +1,4 @@
 data/
 /trash/
-.idea/
-configs/
+.idea/*
+configs/*
