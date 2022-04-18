@@ -10,11 +10,11 @@ MitsubaPyOptiX is python based, so is much easier than C++!
 Also, it exploits OptiX with megakernel architecture, 
 which is faster than wavefront architecture used in Mitsuba2.
 
-| Name           | Rendering Method               | Code             |
+| Name           | Backend                        | Language         |
 |----------------|--------------------------------|------------------|
 | Mitsuba        | CPU based                      | C++              |
 | Mitsuba2       | OptiX, wavefront architecture  | C++              |
-| MitsubaPyOptiX | OptiX, megakernel architecture | Python, some C++ |
+| MitsubaPyOptiX | OptiX, megakernel architecture | Python           |
 
 ## Prerequisites
 You need OptiX 6.5 which could be downloaded 
