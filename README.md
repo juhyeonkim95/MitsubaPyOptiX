@@ -1,9 +1,12 @@
 # MitsubaPyOptiX
 
 This is a custom python, OptiX based path tracing engine that renders Mitsuba formatted scenes.
-This renderer was used for tha paper ["Fast and Lightweight Path Guiding Algorithm on GPU"](https://diglib.eg.org/handle/10.2312/pg20211379) by Juhyeon Kim and Young Min Kim (Pacific Graphics 2020).
+This renderer was used for tha paper 
+["Fast and Lightweight Path Guiding Algorithm on GPU"](https://diglib.eg.org/handle/10.2312/pg20211379) 
+by Juhyeon Kim and Young Min Kim (Pacific Graphics 2020 short paper).
 
-(To be updated)
+(20220428) currently being updated
+
 
 ## vs Mitsuba
 MitsubaPyOptiX is python based, so is much easier than C++!
