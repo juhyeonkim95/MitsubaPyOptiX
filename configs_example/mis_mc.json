@@ -1,0 +1,14 @@
+{
+  "include": "common.json",
+  "sampling_strategy": "mis",
+  "q_table_update_method": "mc",
+  "directional_mapping_method": "cylindrical",
+  "spatial_data_structure_type": "grid",
+  "directional_data_structure_type": "grid",
+  "clear_accumulated_info_per_update": false,
+  "accumulative_q_table_update": true,
+  "learning_method": "incremental",
+  "bsdf_sampling_fraction": 0.5,
+  "n_cube":16,
+  "n_uv": 16
+}

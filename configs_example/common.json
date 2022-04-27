@@ -1,0 +1,10 @@
+{
+  "scene_name": "cornell-box",
+  "scene_file_path": "../../scenes/cornell-box/scene.xml",
+  "scale": 4,
+  "max_depth": 8,
+  "rr_begin_depth": 8,
+  "spp": 1024,
+  "use_next_event_estimation": false,
+  "show_picture": true
+}

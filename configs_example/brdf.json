@@ -1,0 +1,4 @@
+{
+  "include": "common.json",
+  "sampling_strategy": "brdf"
+}

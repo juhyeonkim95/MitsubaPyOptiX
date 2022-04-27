@@ -10,7 +10,9 @@ SAMPLE_METHOD_DICT = {
 	"bsdf": SAMPLE_BRDF,
 	"mis": SAMPLE_MIS,
 	"qcos_inversion": SAMPLE_Q_COS_INVERSION,
+	"qcos_reject": SAMPLE_Q_COS_REJECT,
 	"reject": SAMPLE_Q_COS_REJECT,
+	"q_cos_reject_mix": SAMPLE_Q_COS_REJECT,
 	"reject_mix": SAMPLE_Q_COS_REJECT,
 }
 

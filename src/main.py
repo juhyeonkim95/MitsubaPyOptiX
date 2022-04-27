@@ -5,12 +5,11 @@ from core.renderer_constants import process_config
 
 if __name__ == "__main__":
 	argument = sys.argv
-	config_file = "../configs/example/brdf.json"
+	if len(argument) > 1:
+		config_file = argument[1]
+	else:
+		config_file = "../configs_example/brdf.json"
 	config = load_config_recursive(config_file)
-	#config = json.load(open(config_file))
-	#process_config(config)
-	print("Config")
-	print(config)
 
 	import os
 	os.environ["CUDA_VISIBLE_DEVICES"] = "0"

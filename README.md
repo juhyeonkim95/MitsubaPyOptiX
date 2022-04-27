@@ -34,3 +34,14 @@ git clone https://github.com/juhyeonkim95/PyOptiX.git
 cd PyOptiX
 python setup.py install
 ```
+
+## Data
+The data could be downloaded [this site](https://benedikt-bitterli.me/resources/).
+
+## Usage
+To render the scene use following.
+Example config json files are uploaded.
+```
+cd src
+python main.py ../configs_example/brdf.json
+```
