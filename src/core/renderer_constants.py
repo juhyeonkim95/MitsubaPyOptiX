@@ -6,6 +6,8 @@ SAMPLE_Q_COS_REJECT = 4
 SAMPLE_Q_COS_REJECT_MIX = 5
 
 SAMPLE_METHOD_DICT = {
+	"brdf": SAMPLE_BRDF,
+	"bsdf": SAMPLE_BRDF,
 	"mis": SAMPLE_MIS,
 	"qcos_inversion": SAMPLE_Q_COS_INVERSION,
 	"reject": SAMPLE_Q_COS_REJECT,
@@ -73,3 +75,10 @@ def key_value_to_int(key, value):
 		return SAMPLE_METHOD_DICT[value]
 	elif key == "q_table_update_method":
 		return Q_UPDATE_METHOD_DICT[value]
+	else:
+		return value
+
+
+def process_config(configs):
+	for k, v in configs.items():
+		configs[k] = key_value_to_int(k, v)

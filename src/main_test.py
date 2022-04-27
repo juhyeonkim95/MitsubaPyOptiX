@@ -1,7 +1,4 @@
-# import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "6"
-from test_utils import *
-from pyoptix import Compiler
+
 
 
 def make_reference_image_multiple(scene_names=None, scale=1, diffuse_only=False):
@@ -33,6 +30,11 @@ def make_reference_image_multiple(scene_names=None, scale=1, diffuse_only=False)
 
 
 if __name__ == '__main__':
+    import os
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    from pyoptix import Compiler
+
     Compiler.clean()
 
     Compiler.keep_device_function = False
@@ -50,7 +52,8 @@ if __name__ == '__main__':
     # all_scenes = [ 'living-room', 'living-room-2', 'living-room-3', 'staircase', 'staircase2', 'veach-ajar']
     # all_scenes = ['cornell-box-obj']
     # all_scenes = ["material-testball"]
-    test_single_scene('cornell-box-obj', scale=1, test_target=2,
+    from test_utils import *
+    test_single_scene('cornell-box', scale=4, test_target=2,
                       show_picture=True, show_result=True, do_bsdf=True,
                       _spp=256, _time=10, test_time=False)
 
@@ -72,9 +75,9 @@ if __name__ == '__main__':
     #make_reference_image_multiple(all_scenes, scale=2)
     #make_reference_image_multiple(all_scenes, scale=1)
 
-    for scene in all_scenes:
-        test_single_scene(scene, scale=4, test_target=2, show_picture=True, show_result=True,
-                          do_bsdf=True, _spp=1024, _time=10, test_time=False)
+    # for scene in all_scenes:
+    #     test_single_scene(scene, scale=4, test_target=2, show_picture=True, show_result=True,
+    #                       do_bsdf=True, _spp=1024, _time=10, test_time=False)
 
     #test_multiple_and_export_result(all_scenes, 4, output_folder="../result/2021_0803_sdtree_scale_4_time_10", _time=10, test_time=True, test_target=2)
     #test_multiple_and_export_result(all_scenes, 2, output_folder="../result_20210519_scale_2_time_40", _time=40, test_time=True)

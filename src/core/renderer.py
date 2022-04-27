@@ -13,7 +13,7 @@ from core.optix_scene import OptiXSceneContext, update_optix_configs
 
 
 class Renderer:
-    def __init__(self, scale=1, force_all_diffuse=False):
+    def __init__(self, **kwargs):
         """
         This is created only once!
         :param scale:
@@ -24,10 +24,10 @@ class Renderer:
 
         self.width = 0
         self.height = 0
+        self.scale = kwargs.get("scale", 1)
 
         self.scene = None
         self.scene_name = None
-        self.scale = scale
         self.reference_image = None
         self.scene_octree = None
         self.context = None
@@ -36,11 +36,15 @@ class Renderer:
         self.render_logger = load_logger('Render logger')
         self.render_logger.setLevel(logging.INFO)
 
-    def init_scene_config(self, scene_name):
+    def init_scene_config(self, scene_name, scene_file_path=None):
         # load scene info (non optix)
         self.scene = Scene(scene_name)
         self.scene_name = scene_name
-        self.scene.load_scene_from("../scene/%s/scene.xml" % scene_name)
+
+        if scene_file_path == None:
+            scene_file_path = "../../scenes/%s/scene.xml" % scene_name
+
+        self.scene.load_scene_from(scene_file_path)
         self.width = self.scene.width // self.scale
         self.height = self.scene.height // self.scale
 
@@ -51,7 +55,7 @@ class Renderer:
         self.context['output_buffer'] = Buffer.empty((height, width, 4), dtype=np.float32, buffer_type='o', drop_last_dim=True)
         self.context['output_buffer2'] = Buffer.empty((height, width, 4), dtype=np.float32, buffer_type='o',  drop_last_dim=True)
 
-    def load_scene(self, scene_name, forced=False):
+    def load_scene(self, scene_name, forced=False, scene_file_path=None):
         if self.scene_name != scene_name or forced:
             del self.optix_context
             del self.scene
@@ -62,7 +66,7 @@ class Renderer:
                 self.optix_context = OptiXSceneContext(self.context)
 
             with time_measure("[2] Scene Config Load", self.render_load_logger):
-                self.init_scene_config(scene_name)
+                self.init_scene_config(scene_name, scene_file_path)
 
             with time_measure("[3] OptiX Load", self.render_load_logger):
                 self.optix_context.load_scene(self.scene)
@@ -74,6 +78,7 @@ class Renderer:
     def render(
             self,
             scene_name="cornell-box",
+            scene_file_path=None,
             spp=256,
             time_limit_in_sec=-1,
             time_limit_init_ignore_step=0,
@@ -86,25 +91,31 @@ class Renderer:
             accumulative_q_table_update=True,
             max_depth=8,
             rr_begin_depth=4,
-            directional_mapping_method="shirley",
+            directional_mapping_method="cylindrical",
             use_bsdf_first_force=True,
             force_update_q_table=False,
-            bsdf_sampling_fraction=0.0,
+            bsdf_sampling_fraction=0.5,
             min_epsilon=0.0,
             no_exploration=False,
             convert_ldr=True,
+            use_next_event_estimation=False,
             **kwargs
     ):
+        self.scale = kwargs.get("scale", 1)
+        sampling_strategy = key_value_to_int("sampling_strategy", sampling_strategy)
+        q_table_update_method = key_value_to_int("q_table_update_method", q_table_update_method)
+
         # load scene info & init optix
         update_optix_configs(
             sampling_strategy=sampling_strategy,
             q_table_update_method=q_table_update_method,
             spatial_data_structure_type=kwargs.get("spatial_data_structure_type", "grid"),
             directional_data_structure_type=kwargs.get("directional_data_structure_type", "grid"),
-            directional_mapping_method=directional_mapping_method
+            directional_mapping_method=directional_mapping_method,
+            use_next_event_estimation=use_next_event_estimation
         )
 
-        optix_created = self.load_scene(scene_name)
+        optix_created = self.load_scene(scene_name, scene_file_path=scene_file_path)
         if not optix_created:
             self.optix_context.update_program()
 
@@ -259,7 +270,7 @@ class Renderer:
             plt.show()
 
         # (1) Error with reference image
-        error_mean = 0.1
+        error_mean = 1.0
         if self.reference_image is not None and self.reference_image.shape == final_image.shape:
             error = np.abs(final_image - self.reference_image)
             error_mean = np.mean(error)
@@ -316,6 +327,8 @@ class Renderer:
 
         self.render_logger.info("[Rendering complete]")
         for key, v in results.items():
+            if key == "image":
+                continue
             self.render_logger.info("\t -%s : %s" % (str(key), str(v)))
 
         return results

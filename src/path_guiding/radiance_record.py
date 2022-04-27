@@ -14,17 +14,17 @@ from core.renderer_constants import *
 
 def get_directional_data_structure(q_table, **kwargs) -> DirectionalDataStructure:
     directional_type = kwargs.get("directional_data_structure_type", "grid")
-    if directional_type == "grid":
+    if directional_type == "grid" or directional_type == DIRECTIONAL_DATA_STRUCTURE_GRID:
         return DirectionalGrid(q_table, **kwargs)
-    elif directional_type == "quadtree" or directional_type == "quad_tree":
+    elif directional_type == "quadtree" or directional_type == "quad_tree" or directional_type == DIRECTIONAL_DATA_STRUCTURE_QUADTREE:
         return DirectionalQuadTree(q_table, **kwargs)
 
 
 def get_spatial_data_structure(q_table, **kwargs) -> SpatialDataStructure:
     spatial_type = kwargs.get("spatial_data_structure_type", "grid")
-    if spatial_type == "grid":
+    if spatial_type == "grid" or spatial_type == SPATIAL_DATA_STRUCTURE_VOXEL:
         return SpatialVoxel(q_table, **kwargs)
-    elif spatial_type == "binary_tree":
+    elif spatial_type == "binary_tree" or spatial_type == SPATIAL_DATA_STRUCTURE_BINARY_TREE:
         return SpatialAdaptiveBinaryTree(q_table, **kwargs)
 
 

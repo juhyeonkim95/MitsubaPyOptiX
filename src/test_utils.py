@@ -73,7 +73,6 @@ def test_single_scene(scene_name,
 
     if do_bsdf:
         total_results["brdf"] = renderer.render(**common_params, sampling_strategy=SAMPLE_BRDF)
-        return
 
     def test_2():
         common_params2 = {
@@ -101,7 +100,6 @@ def test_single_scene(scene_name,
         common_params_total["q_table_update_method"] = Q_UPDATE_SARSA
         total_results["binary_tree_quadtree_cpu_single_sarsa"] = renderer.render(**common_params_total, quad_tree_update_type='cpu_single')
 
-        common_params_total["sampling_strategy"] = ""
         common_params_total["q_table_update_method"] = Q_UPDATE_MONTE_CARLO
         total_results["binary_tree_quadtree_cpu_single"] = renderer.render(**common_params_total, quad_tree_update_type='cpu_single')
         common_params_total["q_table_update_method"] = Q_UPDATE_SARSA

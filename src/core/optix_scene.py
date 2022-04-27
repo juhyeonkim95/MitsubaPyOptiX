@@ -25,6 +25,8 @@ def update_optix_configs(config_file_path="optix/app_config.h", **kwargs):
             list_of_lines[i] = "#define DIRECTIONAL_DATA_STRUCTURE_TYPE %d\n" % change_to_int("directional_data_structure_type")
         if list_of_lines[i].startswith("#define DIRECTION_UV_MAPPING_TYPE "):
             list_of_lines[i] = "#define DIRECTION_UV_MAPPING_TYPE %d\n" % change_to_int("directional_mapping_method")
+        if list_of_lines[i].startswith("#define USE_NEXT_EVENT_ESTIMATION "):
+            list_of_lines[i] = "#define USE_NEXT_EVENT_ESTIMATION %d\n" % (1 if kwargs.get("use_next_event_estimation", False) else 0)
 
     with open(config_file_path, "w") as f:
         f.writelines(list_of_lines)
