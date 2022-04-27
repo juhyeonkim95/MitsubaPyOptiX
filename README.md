@@ -1,8 +1,8 @@
 # MitsubaPyOptiX
 This is a custom python, OptiX based path tracing engine that renders Mitsuba formatted scenes.
-This renderer was used for tha paper 
+This renderer was used for the paper 
 ["Fast and Lightweight Path Guiding Algorithm on GPU"](https://diglib.eg.org/handle/10.2312/pg20211379) 
-by Juhyeon Kim and Young Min Kim (Pacific Graphics 2020 short paper).
+by Juhyeon Kim and Young Min Kim (Pacific Graphics 2021 short paper).
 
 (20220428) currently being updated
 
@@ -37,8 +37,8 @@ cd PyOptiX
 python setup.py install
 ```
 
-## Data
-The data could be downloaded [this site](https://benedikt-bitterli.me/resources/).
+## Scene Data
+The scene data could be downloaded [this site](https://benedikt-bitterli.me/resources/).
 
 ## Usage
 To render the scene use following.
@@ -46,4 +46,21 @@ Example config json files are uploaded.
 ```
 cd src
 python main.py ../configs_example/brdf.json
+```
+
+Details for configuration could be found [here](configs_example/README.md).
+
+## Citation
+If you find this useful for your research, please consider to cite:
+```
+@inproceedings {10.2312:pg.20211379,
+booktitle = {Pacific Graphics Short Papers, Posters, and Work-in-Progress Papers},
+editor = {Lee, Sung-Hee and Zollmann, Stefanie and Okabe, Makoto and Wünsche, Burkhard},
+title = {{Fast and Lightweight Path Guiding Algorithm on GPU}},
+author = {Kim, Juhyeon and Kim, Young Min},
+year = {2021},
+publisher = {The Eurographics Association},
+ISBN = {978-3-03868-162-5},
+DOI = {10.2312/pg.20211379}
+}
 ```
