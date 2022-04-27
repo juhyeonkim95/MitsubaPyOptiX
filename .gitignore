@@ -3,7 +3,7 @@ data/*
 /trash/
 .idea/*
 configs/*
-src/main.py
+src/main_old.py
 src/main_test.py
 src/main_test_multiprocessing.py
 src/quadtree_updater.c
