@@ -1,4 +1,5 @@
 # MitsubaPyOptiX
+<img src="assets/thumbnail.gif" width="250" height="250"/>
 
 This is a custom python, OptiX based path tracing engine that renders Mitsuba formatted scenes.
 This renderer was used for tha paper 
