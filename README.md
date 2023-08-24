@@ -4,8 +4,6 @@ This renderer was used for the paper
 ["Fast and Lightweight Path Guiding Algorithm on GPU"](https://diglib.eg.org/handle/10.2312/pg20211379) 
 by Juhyeon Kim and Young Min Kim (Pacific Graphics 2021 short paper).
 
-(20220428) currently being updated
-
 
 ## vs Mitsuba
 MitsubaPyOptiX is python based, so is much easier than C++!
@@ -25,12 +23,13 @@ You need OptiX 6.5 which could be downloaded
 Do not forget to set `OptiX_INSTALL_DIR` and `LD_LIBRARY_PATH` in bash file.
 Then create an environment and install requirements.
 ```
-conda create --name pyoptixpathtracer python=3.8
+conda create --name pyoptixpathtracer python=3.10
 conda activate pyoptixpathtracer
 pip install -r requirements.txt
 ```
 
-Also, Install custom PyOptiX that slightly modified the [original one](https://github.com/MathGaron/PyOptiX).
+Also, install custom PyOptiX that slightly modified the [original one](https://github.com/MathGaron/PyOptiX).
+First, install prerequisites from the original PyOptiX. Then,
 ```
 git clone https://github.com/juhyeonkim95/PyOptiX.git
 cd PyOptiX
